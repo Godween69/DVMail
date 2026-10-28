@@ -124,6 +124,32 @@ export class StalwartAdmin {
     if (!(out[0][1].destroyed as string[] | undefined)?.includes(id)) throw bad(502, "Ящик не удалён");
   }
 
+  /**
+   * Сбрасывает основной пароль ящика: новый случайный пароль, показывается один раз.
+   * Меняется ТОЛЬКО поле secret основного пароля точечной правкой (credentials/<ключ>/secret):
+   * пароли приложений и двухфакторка остаются как были (Stalwart отдаёт секреты скрытыми,
+   * поэтому заменять весь список учётных данных нельзя, он бы потерял пароли приложений).
+   */
+  async resetPassword(id: string, confirmName: string): Promise<{ id: string; email: string; password: string; loginOk: boolean }> {
+    const resp = await this.jmap([["x:Account/get", { ids: [id], properties: ["name", "roles", "description", "credentials"] }, "g"]]);
+    const found = (resp[0][1].list as any[])[0];
+    if (!found) throw bad(404, "Такого ящика нет");
+    const info = this.toInfo(found);
+    if (info.name !== confirmName) throw bad(400, "Имя для подтверждения не совпало");
+    if (info.protected) throw bad(403, "Это защищённый ящик, админка не меняет его пароль");
+    const keys = Object.entries((found.credentials ?? {}) as Record<string, { "@type"?: string }>)
+      .filter(([, c]) => c?.["@type"] === "Password")
+      .map(([k]) => k);
+    if (keys.length !== 1 || !/^[A-Za-z0-9_-]{1,32}$/.test(keys[0])) {
+      throw bad(502, "У ящика нет единственного основного пароля, сброс не выполнен");
+    }
+    const password = generatePassword();
+    const out = await this.jmap([["x:Account/set", { update: { [id]: { [`credentials/${keys[0]}/secret`]: password } } }, "s"]]);
+    const res = out[0][1] as { updated?: Record<string, unknown>; notUpdated?: Record<string, { type?: string }> };
+    if (!res.updated || !(id in res.updated)) throw bad(502, "Пароль не изменён: " + String(res.notUpdated?.[id]?.type ?? "причина неизвестна"));
+    return { id, email: info.email, password, loginOk: await this.verifyLogin(info.email, password) };
+  }
+
   /** Проверка входа по паролю (как сделает почтовый клиент) */
   async verifyLogin(email: string, password: string): Promise<boolean> {
     try {

@@ -35,6 +35,16 @@ export class AccountsController {
     return this.stalwart.create(name, description || null);
   }
 
+  // Сброс пароля: новый пароль возвращается один раз. Имя для подтверждения отправляет страница после нажатия «Да, сбросить»
+  @Post(":id/reset-password")
+  @HttpCode(200)
+  async resetPassword(@Param("id") id: string, @Body() body: unknown) {
+    if (!ID_RE.test(id)) throw new BadRequestException({ message: "Неверный Id" });
+    const confirm = (body as Record<string, unknown> | null)?.confirmName;
+    if (typeof confirm !== "string" || !confirm) throw new BadRequestException({ message: "Нужно имя для подтверждения" });
+    return this.stalwart.resetPassword(id, confirm);
+  }
+
   // Удаление через POST: так работает та же защита от подделки запросов, что и для остальных изменений
   @Post(":id/delete")
   @HttpCode(200)

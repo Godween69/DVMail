@@ -4,11 +4,15 @@
 
 const $ = (id) => document.getElementById(id);
 let hideTimer = null;
+let msgTimer = null;
 
+// Уведомление внизу экрана; обычное исчезает само через 6 секунд
 function say(text, ok) {
   const m = $("message");
+  clearTimeout(msgTimer);
   m.textContent = text || "";
   m.className = ok ? "ok" : "";
+  if (text) msgTimer = setTimeout(() => { m.textContent = ""; }, 6000);
 }
 
 async function api(method, path, body) {
@@ -27,6 +31,8 @@ async function api(method, path, body) {
 function showLogin() {
   clearResult();
   $("view-main").hidden = true;
+  $("btn-logout").hidden = true;
+  $("domain").textContent = "";
   $("view-login").hidden = false;
   $("login-password").focus();
 }
@@ -34,6 +40,7 @@ function showLogin() {
 function showMain() {
   $("view-login").hidden = true;
   $("view-main").hidden = false;
+  $("btn-logout").hidden = false;
   loadList();
 }
 
@@ -42,6 +49,21 @@ function clearResult() {
   $("result").hidden = true;
   $("result-password").textContent = "";
   $("result-email").textContent = "";
+  $("result-title").textContent = "";
+}
+
+// Показ пароля (нового ящика или после сброса): один раз, сам исчезает через 2 минуты
+function showResult(title, email, password, loginOk) {
+  clearResult();
+  $("result-title").textContent = title;
+  $("result-email").textContent = email;
+  $("result-password").textContent = password;
+  $("result-note").textContent = loginOk
+    ? "Пробный вход по этому паролю прошёл успешно."
+    : "Внимание: пробный вход не удался. Проверьте ящик в админке Stalwart.";
+  $("result").hidden = false;
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  hideTimer = setTimeout(clearResult, 120000);
 }
 
 function el(tag, text, cls) {
@@ -51,48 +73,89 @@ function el(tag, text, cls) {
   return e;
 }
 
-// Строка списка: адрес, описание, метка роли, кнопка удаления (для защищённых её нет)
+function button(text, cls, onClick) {
+  const b = el("button", text, "btn " + cls);
+  b.type = "button";
+  if (onClick) b.addEventListener("click", onClick);
+  return b;
+}
+
+// Цвет аватарки зависит от имени (шесть оттенков), чтобы ящики отличались с первого взгляда
+function avatarClass(name) {
+  let n = 0;
+  for (const ch of name) n = (n + ch.charCodeAt(0)) % 6;
+  return "avatar av" + n;
+}
+
+// Строка списка: аватарка, адрес, описание, метка роли, кнопки (у защищённых кнопок нет)
 function renderItem(a) {
   const li = el("li");
   const row = el("div", undefined, "row");
-  const left = el("div");
-  const title = el("span", a.email);
-  left.appendChild(title);
-  if (a.role !== "User") left.appendChild(el("span", a.role, "tag"));
-  else if (a.protected) left.appendChild(el("span", "защищён", "tag"));
-  if (a.description) left.appendChild(el("div", a.description, "sub"));
-  row.appendChild(left);
+  const who = el("div", undefined, "who");
+  who.appendChild(el("span", a.name.charAt(0), avatarClass(a.name)));
+  const mail = el("div", undefined, "mail");
+  const addr = el("div", undefined, "addr");
+  addr.appendChild(el("span", a.email));
+  if (a.role !== "User") addr.appendChild(el("span", a.role, "tag"));
+  else if (a.protected) addr.appendChild(el("span", "защищён", "tag"));
+  mail.appendChild(addr);
+  if (a.description) mail.appendChild(el("div", a.description, "sub"));
+  who.appendChild(mail);
+  row.appendChild(who);
   if (!a.protected) {
-    const del = el("button", "Удалить", "link");
-    del.type = "button";
-    del.addEventListener("click", () => openConfirm(li, a));
-    row.appendChild(del);
+    const acts = el("div", undefined, "acts");
+    acts.appendChild(button("Сбросить пароль", "ghost small", () => openReset(li, a)));
+    acts.appendChild(button("Удалить", "ghost small warn", () => openConfirm(li, a)));
+    row.appendChild(acts);
   }
   li.appendChild(row);
   return li;
 }
 
+// Одновременно открыта только одна панель подтверждения
+function closePanels() {
+  document.querySelectorAll("#list .confirm").forEach((p) => p.remove());
+}
+
+// Сброс пароля: достаточно нажать «Да, сбросить пароль»
+function openReset(li, a) {
+  closePanels();
+  const box = el("div", undefined, "confirm calm");
+  box.appendChild(el("div", "Задать новый пароль для " + a.email + "? Старый пароль перестанет работать. Новый будет показан один раз.", "sub"));
+  const go = button("Да, сбросить пароль", "primary small");
+  const acts = el("div", undefined, "acts");
+  go.addEventListener("click", async () => {
+    go.disabled = true;
+    const r = await api("POST", "/api/accounts/" + encodeURIComponent(a.id) + "/reset-password", { confirmName: a.name });
+    box.remove();
+    if (r.ok) { say(""); showResult("Пароль сброшен", r.data.email, r.data.password, r.data.loginOk); }
+    else say((r.data && r.data.message) || "Не удалось сбросить пароль");
+  });
+  acts.append(go, button("Отмена", "ghost small", () => box.remove()));
+  box.appendChild(acts);
+  li.appendChild(box);
+  go.focus();
+}
+
 // Подтверждение удаления: нужно набрать имя ящика, пока оно не совпадёт, кнопка выключена
 function openConfirm(li, a) {
-  if (li.querySelector(".confirm")) return;
+  closePanels();
   const box = el("div", undefined, "confirm");
   box.appendChild(el("div", "Удалить ящик вместе со всеми письмами? Наберите имя: " + a.name, "sub"));
   const input = el("input");
   input.autocomplete = "off";
-  const go = el("button", "Удалить навсегда", "danger");
-  go.type = "button";
+  const go = button("Удалить навсегда", "danger small");
   go.disabled = true;
-  const cancel = el("button", "Отмена", "link");
-  cancel.type = "button";
   input.addEventListener("input", () => { go.disabled = input.value.trim() !== a.name; });
-  cancel.addEventListener("click", () => box.remove());
   go.addEventListener("click", async () => {
     go.disabled = true;
     const r = await api("POST", "/api/accounts/" + encodeURIComponent(a.id) + "/delete", { confirmName: input.value.trim() });
     if (r.ok) { say("Ящик " + a.email + " удалён", true); loadList(); }
     else { say((r.data && r.data.message) || "Не удалось удалить"); box.remove(); }
   });
-  box.append(input, go, cancel);
+  const acts = el("div", undefined, "acts");
+  acts.append(go, button("Отмена", "ghost small", () => box.remove()));
+  box.append(input, acts);
   li.appendChild(box);
   input.focus();
 }
@@ -101,8 +164,8 @@ async function loadList() {
   const r = await api("GET", "/api/accounts");
   if (!r.ok) { if (r.status !== 401) say((r.data && r.data.message) || "Не удалось получить список"); return; }
   $("domain").textContent = "@" + r.data.domain;
-  const ul = $("list");
-  ul.replaceChildren(...r.data.accounts.map(renderItem));
+  $("count").textContent = String(r.data.accounts.length);
+  $("list").replaceChildren(...r.data.accounts.map(renderItem));
 }
 
 $("form-login").addEventListener("submit", async (ev) => {
@@ -127,13 +190,7 @@ $("form-create").addEventListener("submit", async (ev) => {
   say("");
   $("new-name").value = "";
   $("new-desc").value = "";
-  $("result-email").textContent = r.data.email;
-  $("result-password").textContent = r.data.password;
-  $("result-note").textContent = r.data.loginOk
-    ? "Пробный вход по этому паролю прошёл успешно."
-    : "Внимание: пробный вход не удался. Проверьте ящик в админке Stalwart.";
-  $("result").hidden = false;
-  hideTimer = setTimeout(clearResult, 120000); // пароль сам исчезнет через 2 минуты
+  showResult("Ящик создан", r.data.email, r.data.password, r.data.loginOk);
   loadList();
 });
 

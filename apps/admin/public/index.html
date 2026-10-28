@@ -4,54 +4,79 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>DVMail: ящики</title>
+  <meta name="color-scheme" content="light dark">
+  <title>Ящики DVMail</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main>
-    <h1>Ящики DVMail</h1>
+  <div class="shell">
+
+    <!-- Шапка -->
+    <header class="top">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">DV</span>
+        <div>
+          <h1>Ящики DVMail</h1>
+          <p id="domain" class="muted"></p>
+        </div>
+      </div>
+      <button id="btn-logout" type="button" class="btn ghost" hidden>Выйти</button>
+    </header>
 
     <!-- Вход -->
-    <section id="view-login" hidden>
+    <section id="view-login" class="card narrow" hidden>
+      <h2>Вход</h2>
       <form id="form-login" autocomplete="off">
         <label for="login-password">Пароль админки</label>
         <input id="login-password" type="password" required maxlength="256" autocomplete="current-password">
-        <button type="submit">Войти</button>
+        <button type="submit" class="btn primary block">Войти</button>
       </form>
     </section>
 
     <!-- Основной экран -->
     <section id="view-main" hidden>
-      <div class="bar">
-        <span id="domain"></span>
-        <button id="btn-logout" type="button" class="link">Выйти</button>
+
+      <!-- Пароль нового или сброшенного ящика: показывается один раз -->
+      <div id="result" class="card result" hidden role="status">
+        <p id="result-title" class="result-title"></p>
+        <p id="result-email" class="result-email"></p>
+        <code id="result-password"></code>
+        <p id="result-note" class="muted"></p>
+        <div class="actions">
+          <button id="btn-copy" type="button" class="btn primary">Копировать пароль</button>
+          <button id="btn-hide" type="button" class="btn ghost">Скрыть</button>
+        </div>
+        <p class="hint">Пароль показывается один раз и исчезнет сам через 2 минуты. Скопируйте его в менеджер паролей. Если потеряется, нажмите «Сбросить пароль» у ящика.</p>
       </div>
 
-      <h2>Ящики</h2>
-      <ul id="list" class="list"></ul>
+      <div class="card">
+        <div class="card-head">
+          <h2>Ящики</h2>
+          <span id="count" class="pill"></span>
+        </div>
+        <ul id="list" class="list"></ul>
+      </div>
 
-      <h2>Новый ящик</h2>
-      <form id="form-create" autocomplete="off">
-        <label for="new-name">Имя (до @)</label>
-        <input id="new-name" required maxlength="31" pattern="[a-z0-9][a-z0-9._\-]{1,30}" placeholder="например, anna">
-        <label for="new-desc">Описание (необязательно)</label>
-        <input id="new-desc" maxlength="100" placeholder="например, Анна">
-        <button type="submit">Создать</button>
-      </form>
-
-      <!-- Пароль нового ящика: показывается один раз -->
-      <div id="result" class="result" hidden>
-        <p><strong id="result-email"></strong></p>
-        <p>Пароль показывается один раз. Скопируйте его в менеджер паролей.</p>
-        <p><code id="result-password"></code></p>
-        <p id="result-note"></p>
-        <button id="btn-copy" type="button">Копировать</button>
-        <button id="btn-hide" type="button" class="link">Скрыть</button>
+      <div class="card">
+        <h2>Новый ящик</h2>
+        <form id="form-create" autocomplete="off">
+          <div class="fields">
+            <div>
+              <label for="new-name">Имя (до @)</label>
+              <input id="new-name" required maxlength="31" pattern="[a-z0-9][a-z0-9._\-]{1,30}" placeholder="например, anna">
+            </div>
+            <div>
+              <label for="new-desc">Описание (необязательно)</label>
+              <input id="new-desc" maxlength="100" placeholder="например, Анна">
+            </div>
+          </div>
+          <button type="submit" class="btn primary">Создать ящик</button>
+        </form>
       </div>
     </section>
 
-    <p id="message" role="status"></p>
-  </main>
+  </div>
+  <p id="message" role="status"></p>
   <script src="/app.js"></script>
 </body>
 </html>
