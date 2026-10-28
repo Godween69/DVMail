@@ -1,0 +1,24 @@
+# Зависимости и сборка
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.log
+
+# Секреты и ключи (никогда не попадают в репозиторий)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+
+# Системное
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
