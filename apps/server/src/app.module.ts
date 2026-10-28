@@ -1,5 +1,26 @@
-import { Module } from "@nestjs/common";
+import { DynamicModule, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
+import { AuthController } from "./auth.controller";
+import { AppConfig, CONFIG } from "./config";
+import { CsrfGuard } from "./csrf.guard";
 import { HealthController } from "./health.controller";
+import { LoginLimiter } from "./login-limiter";
+import { MailController } from "./mail.controller";
+import { SessionGuard } from "./session.guard";
+import { SessionStore } from "./session.store";
+import { StalwartClient } from "./stalwart.client";
 
-@Module({ controllers: [HealthController] })
-export class AppModule {}
+@Module({})
+export class AppModule {
+  static forRoot(cfg: AppConfig): DynamicModule {
+    return {
+      module: AppModule,
+      controllers: [HealthController, AuthController, MailController],
+      providers: [
+        { provide: CONFIG, useValue: cfg },
+        { provide: APP_GUARD, useClass: CsrfGuard }, // защита от подделки запросов на всех маршрутах
+        SessionStore, LoginLimiter, StalwartClient, SessionGuard,
+      ],
+    };
+  }
+}

@@ -1,9 +1,8 @@
-import { NestFactory } from "@nestjs/core";
-import { AppModule } from "./app.module";
+import "reflect-metadata";
+import { createApp } from "./bootstrap";
 
 async function main() {
-  const app = await NestFactory.create(AppModule);
-  app.getHttpAdapter().getInstance().disable("x-powered-by"); // не рассказываем, на чём работаем
-  await app.listen(3000, "127.0.0.1"); // только локально: наружу выходит через Caddy и туннель
+  const { app, cfg } = await createApp();
+  await app.listen(cfg.port, cfg.host); // в контейнере HOST=0.0.0.0, наружу порт не публикуется
 }
 main();

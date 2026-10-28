@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "test": "nest build && node --test test/server.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "@types/express": "^5.0.0"
   }
 }

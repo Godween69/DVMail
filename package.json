@@ -2,11 +2,18 @@
   "name": "dvmail",
   "private": true,
   "license": "MIT",
-  "engines": { "node": ">=22" },
-  "workspaces": ["packages/*", "apps/*"],
-  "overrides": { "multer": "2.5.0" },
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "overrides": {
+    "multer": "2.5.0"
+  },
   "scripts": {
-    "test": "npm test --workspace @dvmail/crypto",
+    "test": "npm test --workspace @dvmail/crypto && npm test --workspace @dvmail/server",
     "build": "npm run build --workspace @dvmail/server && npm run build --workspace @dvmail/web",
     "licenses": "node tools/check-licenses.mjs"
   }
