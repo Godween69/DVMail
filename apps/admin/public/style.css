@@ -1,0 +1,32 @@
+/* Минимальный вид: светлая и тёмная тема по настройке системы, без картинок и внешних шрифтов */
+:root {
+  --bg: #f6f6f4; --fg: #1d1d1b; --muted: #6b6b66; --line: #d9d9d3; --card: #fff;
+  --accent: #1f5fbf; --danger: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151515; --fg: #ececea; --muted: #9a9a94; --line: #34342f; --card: #1e1e1c; --accent: #6aa3ff; --danger: #ff8a80; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 1.4rem; margin: 0 0 16px; }
+h2 { font-size: 1.05rem; margin: 28px 0 8px; }
+.bar { display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
+.list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+.list li { padding: 10px 12px; border-top: 1px solid var(--line); }
+.list li:first-child { border-top: 0; }
+.row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.sub { color: var(--muted); font-size: 0.9rem; }
+.tag { font-size: 0.75rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; color: var(--muted); margin-left: 6px; }
+label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 0.9rem; }
+input { width: 100%; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+button { margin-top: 12px; padding: 8px 14px; font: inherit; color: #fff; background: var(--accent); border: 0; border-radius: 6px; cursor: pointer; }
+button.link { background: none; color: var(--accent); padding: 0; margin: 0; }
+button.danger { background: var(--danger); color: #fff; }
+button:disabled { opacity: 0.5; cursor: default; }
+.confirm { margin-top: 8px; padding: 8px; border: 1px dashed var(--danger); border-radius: 6px; }
+.result { margin-top: 20px; padding: 12px; background: var(--card); border: 2px solid var(--accent); border-radius: 8px; }
+code { display: block; padding: 8px; background: var(--bg); border-radius: 6px; font: 1rem ui-monospace, monospace; word-break: break-all; user-select: all; }
+#message { min-height: 1.5em; color: var(--danger); margin-top: 16px; }
+#message.ok { color: var(--accent); }
+[hidden] { display: none !important; }

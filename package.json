@@ -13,8 +13,8 @@
     "multer": "2.5.0"
   },
   "scripts": {
-    "test": "npm test --workspace @dvmail/crypto && npm test --workspace @dvmail/server",
-    "build": "npm run build --workspace @dvmail/server && npm run build --workspace @dvmail/web",
+    "test": "npm test --workspace @dvmail/crypto && npm test --workspace @dvmail/server && npm test --workspace @dvmail/admin",
+    "build": "npm run build --workspace @dvmail/server && npm run build --workspace @dvmail/admin && npm run build --workspace @dvmail/web",
     "licenses": "node tools/check-licenses.mjs"
   }
 }
