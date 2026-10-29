@@ -10,9 +10,10 @@ export class StalwartError extends Error {
 
 // Белый список JMAP-методов: сервер НЕ является открытым прокси к Stalwart.
 // Настройки аккаунта, ключи и пароли приложений через него недоступны.
-// Email/set вызывается только из кода контроллера с жёстко заданными изменениями (прочитано, корзина, удаление).
-const ALLOWED_METHODS = new Set(["Mailbox/get", "Email/query", "Email/get", "Email/set"]);
-const USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail"];
+// Email/set и EmailSubmission/set вызываются только из кода контроллеров с жёстко заданными изменениями
+// (прочитано, корзина, удаление, создание и отправка своего письма). Identity/get только читает адреса отправителя.
+const ALLOWED_METHODS = new Set(["Mailbox/get", "Email/query", "Email/get", "Email/set", "Identity/get", "EmailSubmission/set"]);
+const USING = ["urn:ietf:params:jmap:core", "urn:ietf:params:jmap:mail", "urn:ietf:params:jmap:submission"];
 const MAIL_CAP = "urn:ietf:params:jmap:mail";
 // Безопасные символы идентификаторов: в адрес запроса попадает только это
 export const ID_RE = /^[A-Za-z0-9._~-]{1,200}$/;

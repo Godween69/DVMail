@@ -1,7 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Mailbox } from "./api";
 import { folderLabel } from "./format";
-import { IconArchive, IconDraft, IconFolder, IconInbox, IconJunk, IconLogout, IconMoon, IconSend, IconSun, IconTrash } from "./icons";
+import { IconArchive, IconDraft, IconFolder, IconInbox, IconJunk, IconLogout, IconMoon, IconPen, IconSend, IconSun, IconTrash } from "./icons";
 import type { Theme } from "./theme";
 
 const ICONS: Record<string, () => React.JSX.Element> = {
@@ -11,11 +11,11 @@ const ICONS: Record<string, () => React.JSX.Element> = {
 
 interface Props {
   boxes: Mailbox[]; current: string | null; onSelect: (id: string) => void;
-  email: string; theme: Theme; onToggleTheme: () => void; onLogout: () => void;
+  email: string; theme: Theme; onToggleTheme: () => void; onLogout: () => void; onCompose: () => void;
   drawer: boolean; open: boolean; onClose: () => void;
 }
 
-export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme, onLogout, drawer, open, onClose }: Props) {
+export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme, onLogout, onCompose, drawer, open, onClose }: Props) {
   return (
     <>
       {drawer && open && <div className="backdrop" onClick={onClose} aria-hidden="true" />}
@@ -24,6 +24,7 @@ export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme,
           <span className="logo" aria-hidden="true">DV</span>
           <span className="brand-name">DVMail</span>
         </div>
+        <button className="btn primary compose-btn" onClick={onCompose}><IconPen width={16} height={16} /> Написать</button>
         <nav>
           <LayoutGroup id="folders">
             <ul className="folders">

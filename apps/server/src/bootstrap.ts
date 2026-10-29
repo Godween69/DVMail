@@ -1,5 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import { json } from "express";
 import type { Request, Response, NextFunction } from "express";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -22,6 +23,8 @@ export async function createApp(over: Partial<AppConfig> = {}) {
   });
   app.disable("x-powered-by");                         // не рассказываем, на чём работаем
   app.set("trust proxy", "loopback, uniquelocal");     // настоящий адрес берём только от своих прокси
+  // Тело письма больше обычных запросов: для отправки свой предел (раньше общего разбора), для остального 16 КБ
+  app.use("/api/send", json({ limit: "256kb" }));
   app.useBodyParser("json", { limit: "16kb" });        // тела запросов маленькие
   app.use((_req: unknown, res: Response, next: NextFunction) => {
     res.setHeader("Cache-Control", "no-store");

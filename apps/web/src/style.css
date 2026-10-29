@@ -44,7 +44,7 @@ body {
     var(--bg);
   background-attachment: fixed; -webkit-font-smoothing: antialiased;
 }
-button, input { font: inherit; color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 h1, h2, h3, p { margin: 0; }
 ul { list-style: none; margin: 0; padding: 0; }
@@ -255,6 +255,52 @@ a { color: var(--accent); }
 .toasts { position: fixed; z-index: 50; left: 50%; bottom: 18px; transform: translateX(-50%); display: grid; gap: 8px; justify-items: center; pointer-events: none; width: max-content; max-width: calc(100% - 28px); }
 .toast { padding: 9px 16px; border-radius: 10px; color: #fff; font-weight: 550; font-size: .9rem; background: #1f7a48; box-shadow: 0 2px 8px rgba(16, 24, 40, .28); }
 .toast.err { background: #b3302a; }
+
+
+/* ---------- Написать письмо ---------- */
+.compose-btn { width: calc(100% - 4px); margin: 0 2px 12px; }
+.compose-mini { display: none; }
+.compose-layer { position: fixed; inset: 0; z-index: 40; display: grid; grid-template-columns: minmax(0, 1fr); place-items: end center; padding: 16px; }
+.compose-backdrop { position: absolute; inset: 0; background: rgba(8, 11, 18, .45); }
+.compose {
+  position: relative; display: flex; flex-direction: column; width: min(720px, 100%); max-height: min(720px, 100%); min-height: 420px;
+  border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); overflow: hidden;
+}
+.c-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 8px 18px; border-bottom: 1px solid var(--line); }
+.c-head h2 { font-size: 1rem; font-weight: 700; }
+.c-fields { display: grid; grid-template-columns: minmax(0, 1fr); padding: 4px 18px; }
+.c-row { display: flex; align-items: center; gap: 10px; min-height: 38px; border-bottom: 1px solid var(--line); }
+.c-row:last-child { border-bottom: 0; }
+.c-row label { flex: none; width: 62px; color: var(--muted); font-size: .84rem; }
+.c-row input, .c-row select, .c-static { flex: 1; min-width: 0; height: 36px; padding: 0; border: 0; background: transparent; outline: none; font-size: .95rem; }
+.c-row select { padding: 0 4px; border-radius: 8px; text-overflow: ellipsis; }
+.c-more { flex: none; }
+.c-row select option { background: var(--panel); color: var(--fg); }
+.c-static { display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-row input::placeholder, .c-text::placeholder { color: var(--muted); opacity: .7; }
+.c-row:focus-within label { color: var(--accent); }
+.c-more { display: inline-flex; gap: 10px; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--accent); font-size: .82rem; font-weight: 600; }
+.link-btn:hover { text-decoration: underline; }
+.c-note { margin: 4px 18px 0; }
+.c-text {
+  flex: 1; min-height: 200px; margin: 6px 0 0; padding: 12px 18px; border: 0; border-top: 1px solid var(--line); background: transparent;
+  outline: none; resize: none; font: inherit; font-size: 15px; line-height: 1.6;
+}
+.c-msg { overflow: hidden; padding: 0 18px; font-size: .88rem; }
+.c-msg > span { display: block; padding: 8px 0; }
+.err-text { color: var(--danger); }
+.c-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--panel2); }
+.c-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; width: 100%; font-size: .9rem; }
+.c-hint { font-size: .78rem; }
+.spinner { vertical-align: -3px; }
+@media (max-width: 999px) { .compose-mini { display: inline-grid; } }
+@media (max-width: 699px) {
+  .compose-layer { padding: 0; }
+  .compose { width: 100%; max-height: 100%; height: 100%; border-radius: 0; border: 0; }
+  .c-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .compose, .compose-backdrop { transition: none; } }
 
 /* ---------- Адаптивность ---------- */
 @media (max-width: 999px) {

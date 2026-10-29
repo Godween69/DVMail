@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, type EmailFull, type EmailItem, type Mailbox } from "./api";
+import { api, ApiError, type EmailFull, type EmailItem, type Identity, type Mailbox } from "./api";
+import { Compose } from "./Compose";
+import { buildDraft, emptyDraft, type ComposeMode, type Draft } from "./compose";
 import { folderLabel, sortMailboxes } from "./format";
 import { useMedia, useRoute, useToasts } from "./hooks";
 import { MessageList } from "./MessageList";
@@ -12,6 +14,7 @@ const PAGE = 30;
 const POLL_MS = 60_000;
 
 interface ListState { items: EmailItem[]; total: number; loading: boolean; error: string | null }
+interface ComposeState { key: number; draft: Draft; identityId: string; note: string | null }
 interface OpenState { id: string; data: EmailFull | null; loading: boolean; error: string | null }
 const msg = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -26,6 +29,8 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
   const [drawer, setDrawer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [tick, setTick] = useState(0);
+  const [identities, setIdentities] = useState<Identity[] | null>(null);
+  const [compose, setCompose] = useState<ComposeState | null>(null);
   const [toasts, toast] = useToasts();
   const req = useRef(0);
   const small = useMedia("(max-width: 999px)");
@@ -131,6 +136,29 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
     } catch (e) { toast(msg(e, "Не удалось удалить письмо"), "err"); }
   }
 
+  // ---- Новое письмо, ответ, пересылка
+  async function openCompose(mode: ComposeMode, mail?: EmailFull) {
+    let ids = identities;
+    if (!ids) {
+      try { ids = await api.identities(); setIdentities(ids); }
+      catch (e) { toast(msg(e, "Не удалось подготовить письмо"), "err"); return; }
+    }
+    if (ids.length === 0) { toast("У этого ящика нет адреса отправителя", "err"); return; }
+    const own = [email, ...ids.map((i) => i.email)];
+    const draft = mode === "new" || !mail ? emptyDraft() : buildDraft(mode, mail, own);
+    // отвечаем с того адреса, на который пришло письмо, иначе с первого
+    const got = mail ? [...mail.to, ...mail.cc].map((a) => a.email.toLowerCase()) : [];
+    const identityId = (ids.find((i) => got.includes(i.email.toLowerCase())) ?? ids[0]).id;
+    const note = mode === "forward" && mail && mail.attachments.length > 0 ? "Вложения исходного письма не пересылаются: отправка вложений пока не поддерживается." : null;
+    setDrawer(false);
+    setCompose({ key: Date.now(), draft, identityId, note });
+  }
+  function sent(filed: boolean) {
+    setCompose(null);
+    toast(filed ? "Письмо отправлено" : "Письмо отправлено, но копия не попала в «Отправленные»", filed ? "ok" : "err");
+    void refresh(false);
+  }
+
   const selectBox = (id: string) => { setInput(""); setQ(""); setDrawer(false); go({ box: id, id: null }); };
   const hasMore = list.items.length < list.total;
   const showReader = !narrow || !!route.id;
@@ -142,12 +170,12 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
 
   return (
     <div className={"shell" + (narrow && route.id ? " reading" : "")}>
-      <Sidebar boxes={boxes} current={currentId} onSelect={selectBox} email={email} theme={theme} onToggleTheme={onToggleTheme} onLogout={onLogout} drawer={small} open={drawer} onClose={() => setDrawer(false)} />
+      <Sidebar boxes={boxes} current={currentId} onSelect={selectBox} email={email} theme={theme} onToggleTheme={onToggleTheme} onLogout={onLogout} onCompose={() => void openCompose("new")} drawer={small} open={drawer} onClose={() => setDrawer(false)} />
       {showList && (
         <MessageList
           title={current ? folderLabel(current) : ""} total={list.total} items={list.items} loading={list.loading} error={list.error} hasMore={hasMore}
           selectedId={route.id} showTo={showTo} query={input} refreshing={refreshing}
-          onSelect={(id) => go({ box: currentId, id })} onMore={() => void loadMore()} onQuery={setInput} onMenu={() => setDrawer(true)}
+          onSelect={(id) => go({ box: currentId, id })} onMore={() => void loadMore()} onQuery={setInput} onMenu={() => setDrawer(true)} onCompose={() => void openCompose("new")}
           onRefresh={() => (list.error ? setTick((t) => t + 1) : void refresh(true))} onRetry={() => setTick((t) => t + 1)}
         />
       )}
@@ -157,9 +185,13 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
           inTrash={current?.role === "trash"} narrow={narrow}
           onBack={() => go({ box: currentId, id: null })} onRetry={() => go({ box: currentId, id: route.id }, true)}
           onToggleSeen={() => open?.data && void markSeen(open.data, open.data.unread)} onTrash={() => void trash()}
+          onReply={() => open?.data && void openCompose("reply", open.data)} onReplyAll={() => open?.data && void openCompose("replyAll", open.data)} onForward={() => open?.data && void openCompose("forward", open.data)}
           onCopied={(ok) => toast(ok ? "Адрес скопирован" : "Не удалось скопировать", ok ? "ok" : "err")}
         />
       )}
+      <AnimatePresence>
+        {compose && <Compose key={compose.key} identities={identities ?? []} initial={compose.draft} identityId={compose.identityId} note={compose.note} onClose={() => setCompose(null)} onSent={sent} />}
+      </AnimatePresence>
       <div className="toasts" aria-live="polite">
         <AnimatePresence>
           {toasts.map((t) => (

@@ -20,13 +20,15 @@ const MFA_BASIC = "Basic " + Buffer.from(`${EMAIL}:main-password-needs-code`).to
 let mockHits = 0;
 const PDF = Buffer.from("%PDF-1.4 тестовое вложение");
 const part = (partId, blobId, type, size, extra = {}) => ({ partId, blobId, type, size, charset: null, disposition: null, name: null, cid: null, ...extra });
+// Что заглушка получила на отправку (для проверок) и режимы сбоев
+let SUBMITTED = [], newId = 0, failSubmitMethod = false;
 const MAILS = new Map();
 const addMail = (m) => MAILS.set(m.id, m);
 function resetMails() {
-  MAILS.clear();
+  MAILS.clear(); SUBMITTED = []; failSubmitMethod = false;
   const pdf = part("3", "blob-pdf", "application/pdf", PDF.length, { disposition: "attachment", name: "Счёт/../2026.pdf" });
   addMail({ id: "e1", threadId: "t1", mailboxIds: { m1: true }, keywords: {}, from: [{ name: "Анна", email: "anna@example.org" }], to: [{ name: null, email: EMAIL }],
-    subject: "Счёт на оплату", receivedAt: "2026-10-28T10:00:00Z", sentAt: "2026-10-28T09:59:00Z", preview: "Добрый день", hasAttachment: true, size: 4000, blobId: "blob-e1",
+    subject: "Счёт на оплату", messageId: ["orig-1@example.org"], references: ["root@example.org"], receivedAt: "2026-10-28T10:00:00Z", sentAt: "2026-10-28T09:59:00Z", preview: "Добрый день", hasAttachment: true, size: 4000, blobId: "blob-e1",
     bodyStructure: part(null, null, "multipart/mixed", null), textBody: [part("1", "blob-t", "text/plain", 12)], htmlBody: [part("2", "blob-h", "text/html", 40)],
     attachments: [pdf, part("4", "blob-bad/../x", "image/png", 1)], bodyValues: { 1: { value: "Добрый день", isTruncated: false }, 2: { value: "<p>Добрый <b>день</b><script>alert(1)</script></p>", isTruncated: false } } });
   addMail({ id: "e2", threadId: "t2", mailboxIds: { m1: true }, keywords: { $seen: true }, from: [{ name: null, email: "bob@example.org" }], to: [{ name: null, email: EMAIL }],
@@ -42,6 +44,12 @@ const BOXES = [
   { id: "m1", name: "Inbox", role: "inbox", totalEmails: 3, unreadEmails: 1, secretExtra: "не должно уйти в браузер" },
   { id: "m2", name: "Deleted Items", role: "trash", totalEmails: 0, unreadEmails: 0 },
   { id: "m3", name: "Drafts", role: "drafts", totalEmails: 1, unreadEmails: 0 },
+  { id: "m4", name: "Sent Items", role: "sent", totalEmails: 0, unreadEmails: 0 },
+];
+const IDENTITIES = [
+  { id: "i1", name: "Привет Hello", email: "hello@dvbstudio.ru" },
+  { id: "i2", name: "", email: "alias@dvbstudio.ru" },
+  { id: "i3", name: "Запрещённый", email: "nobody@dvbstudio.ru" },
 ];
 const pick = (o, props) => (props ? Object.fromEntries(props.filter((k) => k in o).map((k) => [k, o[k]])) : o);
 
@@ -51,7 +59,19 @@ function jmap(calls) {
     let r;
     if (args.accountId !== "a1") r = ["error", { type: "forbidden" }, id];
     else if (name === "Mailbox/get") r = [name, { accountId: "a1", list: BOXES.map((b) => pick(b, args.properties ? [...args.properties, "secretExtra"] : null)) }, id];
-    else if (name === "Email/query") {
+    else if (name === "Identity/get") r = [name, { accountId: "a1", list: IDENTITIES.map((i) => pick(i, args.properties)) }, id];
+    else if (name === "EmailSubmission/set") {
+      if (failSubmitMethod) { r = ["error", { type: "serverFail" }, id]; out.push(r); continue; }
+      const res = { accountId: "a1" };
+      for (const [cid, sub] of Object.entries(args.create ?? {})) {
+        const m = MAILS.get(sub.emailId);
+        if (!m) (res.notCreated ??= {})[cid] = { type: "invalidEmail" };
+        else if (sub.identityId === "i3") (res.notCreated ??= {})[cid] = { type: "forbiddenFrom" };
+        else if (sub.envelope.rcptTo.some((x) => x.email.startsWith("bad@"))) (res.notCreated ??= {})[cid] = { type: "invalidEmail" };
+        else { SUBMITTED.push({ ...sub, mail: structuredClone(m) }); (res.created ??= {})[cid] = { id: "sub" + SUBMITTED.length }; }
+      }
+      r = [name, res, id];
+    } else if (name === "Email/query") {
       let ids = [...MAILS.values()].filter((m) => m.mailboxIds[args.filter.inMailbox] && (!args.filter.text || m.subject.includes(args.filter.text))).map((m) => m.id);
       const total = ids.length; ids = ids.slice(args.position ?? 0, (args.position ?? 0) + (args.limit ?? 100));
       state[id] = ids; r = [name, { accountId: "a1", ids, total, position: args.position ?? 0 }, id];
@@ -60,12 +80,20 @@ function jmap(calls) {
       r = [name, { accountId: "a1", list: ids.filter((i) => MAILS.has(i)).map((i) => pick(MAILS.get(i), args.properties)), notFound: ids.filter((i) => !MAILS.has(i)) }, id];
     } else if (name === "Email/set") {
       const res = { accountId: "a1" };
+      for (const [cid, c] of Object.entries(args.create ?? {})) {
+        if (/ОТКАЗ/.test(c.subject ?? "")) { (res.notCreated ??= {})[cid] = { type: "invalidProperties" }; continue; }
+        const mid = "n" + ++newId;
+        MAILS.set(mid, { ...c, id: mid, threadId: "tn" + newId, receivedAt: "2026-10-29T10:00:00Z", preview: "", hasAttachment: false, size: 100, blobId: "blob-" + mid });
+        (res.created ??= {})[cid] = { id: mid };
+      }
       for (const [mid, patch] of Object.entries(args.update ?? {})) {
         const m = MAILS.get(mid); res.updated ??= {};
         if (!m) { (res.notUpdated ??= {})[mid] = { type: "notFound" }; continue; }
         for (const [k, v] of Object.entries(patch)) {
           if (k === "keywords/$seen") { if (v === null) delete m.keywords.$seen; else m.keywords.$seen = true; }
           else if (k === "mailboxIds") m.mailboxIds = v;
+          else if (k.startsWith("mailboxIds/")) { if (v === null) delete m.mailboxIds[k.slice(11)]; else m.mailboxIds[k.slice(11)] = true; }
+          else if (k === "keywords/$draft") delete m.keywords.$draft;
         }
         res.updated[mid] = null;
       }
@@ -496,5 +524,157 @@ test("мусорные параметры и идентификаторы: ни 
   for (const body of ["", "null", "[]", '"x"', "{", '{"seen":{}}', '{"__proto__":{"seen":true}}']) {
     const r = await fetch(base + "/api/emails/e1/seen", { method: "POST", headers: H({ Cookie: c }), body });
     assert.ok(r.status >= 400 && r.status < 500, `тело ${body} дало ${r.status}`);
+  }
+});
+
+
+// ================= Отправка писем (этап Б1) =================
+// Предыдущий тест останавливает и заново запускает заглушку на новом порту, поэтому общий `base` тут уже не годится:
+// для этого раздела поднимаем свежий экземпляр сервера (один на раздел)
+let SB = null;
+const sb = async () => (SB ??= (await start()).url);
+const sess = async () => cookieOf(await login(await sb(), EMAIL, PASS));
+const send = async (body, cookie, url) => post("/api/send", body, cookie, url ?? (await sb()));
+const OK_BODY = { identityId: "i1", to: ["anna@example.org"], subject: "Тема", text: "Текст письма" };
+
+test("адреса отправителя: только нужные поля", async () => {
+  const c = await sess();
+  const j = await (await get("/api/identities", c, await sb())).json();
+  assert.equal(j.identities.length, 3);
+  assert.deepEqual(j.identities[0], { id: "i1", name: "Привет Hello", email: EMAIL });
+  assert.equal((await fetch((await sb()) + "/api/identities")).status, 401);
+});
+
+test("отправка: письмо уходит, получатели без повторов, копия в «Отправленных», черновика не остаётся", async () => {
+  resetMails();
+  const c = await sess();
+  const r = await send({ ...OK_BODY, to: ["anna@example.org", "ANNA@example.org"], cc: ["bob@example.org"], bcc: ["secret@example.org"], subject: "Тема\r\nBcc: evil@example.org", text: "Строка 1\r\nСтрока 2" }, c);
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { ok: true, filed: true });
+  assert.equal(SUBMITTED.length, 1);
+  const sub = SUBMITTED[0];
+  assert.equal(sub.identityId, "i1");
+  assert.deepEqual(sub.envelope.mailFrom, { email: EMAIL, parameters: null });
+  assert.deepEqual(sub.envelope.rcptTo.map((x) => x.email), ["anna@example.org", "bob@example.org", "secret@example.org"]);
+  // отправленное письмо: адрес «От» взят у сервера, тема в одну строку, переводы строк нормализованы
+  assert.deepEqual(sub.mail.from, [{ name: "Привет Hello", email: EMAIL }]);
+  assert.ok(!/[\r\n]/.test(sub.mail.subject), "в теме не должно быть переводов строк");
+  assert.equal(sub.mail.bodyValues[1].value, "Строка 1\nСтрока 2");
+  assert.deepEqual(sub.mail.bcc, [{ email: "secret@example.org" }]);
+  // после отправки письмо лежит в «Отправленных» и больше не черновик
+  const stored = [...MAILS.values()].find((m) => m.subject.startsWith("Тема"));
+  assert.deepEqual(Object.keys(stored.mailboxIds), ["m4"]);
+  assert.ok(!stored.keywords.$draft);
+  assert.equal([...MAILS.values()].filter((m) => m.keywords.$draft).length, 0, "черновиков остаться не должно");
+});
+
+test("ответ: связь с исходным письмом берётся с сервера, а не из браузера", async () => {
+  resetMails();
+  const c = await sess();
+  const r = await send({ ...OK_BODY, replyTo: "e1", subject: "Re: Счёт на оплату" }, c);
+  assert.equal(r.status, 200);
+  assert.deepEqual(SUBMITTED[0].mail.inReplyTo, ["orig-1@example.org"]);
+  assert.deepEqual(SUBMITTED[0].mail.references, ["root@example.org", "orig-1@example.org"]);
+  assert.equal((await send({ ...OK_BODY, replyTo: "нет-такого" }, c)).status, 400);
+  assert.equal((await send({ ...OK_BODY, replyTo: "zzz" }, c)).status, 400, "несуществующее письмо");
+});
+
+test("отправка: проверка входных данных до обращения к Stalwart, ничего не создаётся", async () => {
+  resetMails();
+  const c = await sess();
+  const hits = mockHits;
+  const many = Array.from({ length: 51 }, (_, i) => `u${i}@example.org`);
+  const cases = [
+    {}, null, { ...OK_BODY, identityId: "" }, { ...OK_BODY, identityId: "../x" }, { ...OK_BODY, to: [] },
+    { ...OK_BODY, to: ["не-адрес"] }, { ...OK_BODY, to: ["a@b"] }, { ...OK_BODY, to: ["a b@example.org"] },
+    { ...OK_BODY, to: ["a@example.org\r\nBcc: x@example.org"] }, { ...OK_BODY, to: ["<a@example.org>"] }, { ...OK_BODY, to: "a@example.org" },
+    { ...OK_BODY, to: [123] }, { ...OK_BODY, to: many }, { ...OK_BODY, cc: ["x"] }, { ...OK_BODY, bcc: [{}] },
+    { ...OK_BODY, subject: 5 }, { ...OK_BODY, text: {} }, { ...OK_BODY, text: "я".repeat(100_001) }, { ...OK_BODY, replyTo: 7 },
+  ];
+  for (const b of cases) {
+    const r = await send(b, c);
+    assert.equal(r.status, 400, JSON.stringify(b)?.slice(0, 80));
+  }
+  assert.equal(mockHits, hits, "Stalwart не должен был получить ни одного запроса");
+  assert.equal(SUBMITTED.length, 0);
+});
+
+test("отправка: чужой адрес отправителя отклоняется и ничего не создаётся", async () => {
+  resetMails();
+  const c = await sess();
+  const before = MAILS.size;
+  const r = await send({ ...OK_BODY, identityId: "i-chuzhoy" }, c);
+  assert.equal(r.status, 400);
+  assert.equal(MAILS.size, before);
+  assert.equal(SUBMITTED.length, 0);
+});
+
+test("отправка: отказ сервера понятно объяснён, черновик не остаётся", async () => {
+  resetMails();
+  const c = await sess();
+  const before = MAILS.size;
+  let r = await send({ ...OK_BODY, identityId: "i3" }, c);
+  assert.equal(r.status, 422);
+  assert.match((await r.json()).message, /не разрешает отправлять с этого адреса/);
+  r = await send({ ...OK_BODY, to: ["bad@example.org"] }, c);
+  assert.equal(r.status, 422);
+  assert.match((await r.json()).message, /проверьте адреса/);
+  r = await send({ ...OK_BODY, subject: "ОТКАЗ" }, c);
+  assert.equal(r.status, 422);
+  assert.equal(MAILS.size, before, "после отказа не должно остаться черновиков");
+});
+
+test("отправка: сбой метода сервера даёт 502 без утечек и без оставшегося черновика", async () => {
+  resetMails();
+  const c = await sess();
+  const before = MAILS.size;
+  failSubmitMethod = true;
+  const r = await send(OK_BODY, c);
+  failSubmitMethod = false;
+  assert.equal(r.status, 502);
+  const t = await r.text();
+  assert.ok(!t.includes(PASS) && !/serverFail|stack/.test(t));
+  assert.equal(MAILS.size, before);
+});
+
+test("отправка: без сессии 401, без защитного заголовка 403, чужой Origin 403", async () => {
+  assert.equal((await fetch((await sb()) + "/api/send", { method: "POST", headers: H(), body: JSON.stringify(OK_BODY) })).status, 401);
+  const c = await sess();
+  assert.equal((await fetch((await sb()) + "/api/send", { method: "POST", headers: { "Content-Type": "application/json", Cookie: c }, body: JSON.stringify(OK_BODY) })).status, 403);
+  assert.equal((await fetch((await sb()) + "/api/send", { method: "POST", headers: H({ Cookie: c, Origin: "https://evil.example" }), body: JSON.stringify(OK_BODY) })).status, 403);
+  assert.equal((await fetch((await sb()) + "/api/send", { method: "POST", headers: H({ Cookie: c, "Sec-Fetch-Site": "cross-site" }), body: JSON.stringify(OK_BODY) })).status, 403);
+});
+
+test("отправка: размер тела: до 100 000 знаков можно, дальше отказ, огромное тело отсекается", async () => {
+  resetMails();
+  const c = await sess();
+  assert.equal((await send({ ...OK_BODY, text: "а".repeat(100_000) }, c)).status, 200);
+  assert.equal((await send({ ...OK_BODY, text: "a".repeat(150_000) }, c)).status, 400);
+  assert.equal((await send({ ...OK_BODY, text: "a".repeat(300_000) }, c)).status, 413);
+  // на остальных маршрутах предел прежний, 16 КБ
+  assert.equal((await post("/api/emails/e1/seen", { seen: true, pad: "x".repeat(20_000) }, c, await sb())).status, 413);
+});
+
+test("отправка: не больше 40 писем в час с одного ящика", async () => {
+  resetMails();
+  const { url } = await start();
+  const c = cookieOf(await login(url, EMAIL, PASS));
+  for (let i = 0; i < 40; i++) assert.equal((await send(OK_BODY, c, url)).status, 200, "письмо " + i);
+  const r = await send(OK_BODY, c, url);
+  assert.equal(r.status, 429);
+  assert.match((await r.json()).message, /Лимит отправки/);
+  // другой процесс с чистым счётчиком не затронут (счётчик у каждого свой)
+  const other = await start();
+  assert.equal((await send(OK_BODY, cookieOf(await login(other.url, EMAIL, PASS)), other.url)).status, 200);
+});
+
+test("белый список JMAP: Identity/EmailSubmission доступны только через свои маршруты", async () => {
+  const c = await sess();
+  for (const p of ["/api/jmap", "/jmap", "/api/identities/x", "/api/submission"]) {
+    const r = await get(p, c, await sb());
+    const t = await r.text();
+    // запасной маршрут сайта отдаёт страницу (HTML), но никакого JMAP наружу не отдаётся
+    assert.ok(r.status === 404 || (r.status === 200 && /text\/html/.test(r.headers.get("content-type") ?? "")), `${p} дал ${r.status}`);
+    assert.ok(!/methodResponses|accountId/.test(t), `${p}: утечка JMAP`);
   }
 });

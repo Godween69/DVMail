@@ -11,6 +11,8 @@ export interface EmailFull {
   subject: string; receivedAt: string; sentAt: string; size: number; text: string; html: string;
   truncated: boolean; encrypted: boolean; attachments: Attachment[];
 }
+export interface Identity { id: string; name: string; email: string }
+export interface SendRequest { identityId: string; to: string[]; cc: string[]; bcc: string[]; subject: string; text: string; replyTo: string | null }
 export interface EmailPage { total: number; position: number; emails: EmailItem[] }
 
 export class ApiError extends Error {
@@ -53,6 +55,8 @@ export const api = {
   email: (id: string) => request<EmailFull>("GET", `/api/emails/${enc(id)}`),
   setSeen: (id: string, seen: boolean) => request<{ ok: true }>("POST", `/api/emails/${enc(id)}/seen`, { seen }),
   trash: (id: string) => request<{ ok: true; permanent: boolean }>("POST", `/api/emails/${enc(id)}/trash`, {}),
+  identities: () => request<{ identities: Identity[] }>("GET", "/api/identities").then((r) => r.identities),
+  send: (b: SendRequest) => request<{ ok: true; filed: boolean }>("POST", "/api/send", b),
   rawUrl: (id: string) => `/api/emails/${enc(id)}/raw`,
   attachmentUrl: (id: string, blobId: string) => `/api/emails/${enc(id)}/attachments/${enc(blobId)}`,
 };

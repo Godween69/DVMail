@@ -33,3 +33,7 @@ export const IconEyeOff = base(<><path d="M4 4l16 16" /><path d="M9.9 5.8A9.6 9.
 export const IconRefresh = base(<><path d="M20 11a8 8 0 0 0-14.3-4.3L4 8.5" /><path d="M4 4v4.5h4.5" /><path d="M4 13a8 8 0 0 0 14.3 4.3L20 15.5" /><path d="M20 20v-4.5h-4.5" /></>);
 export const IconFile = base(<><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" /><path d="M14 3v5h5" /></>);
 export const IconShield = base(<><path d="M12 3l8 3v6c0 4.4-3.2 7.8-8 9-4.8-1.2-8-4.6-8-9V6l8-3z" /><path d="M8.7 12.2l2.3 2.3 4.3-4.6" /></>);
+export const IconPen = base(<><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M14 7l3 3" /></>);
+export const IconReply = base(<><path d="M9.5 6L4 11.5 9.5 17" /><path d="M4 11.5h9a6.5 6.5 0 0 1 6.5 6.5v1" /></>);
+export const IconReplyAll = base(<><path d="M7 6L2 11l5 5" /><path d="M12 6L7 11l5 5" /><path d="M7 11h6.5A6.5 6.5 0 0 1 20 17.5V19" /></>);
+export const IconForward = base(<><path d="M14.5 6L20 11.5 14.5 17" /><path d="M20 11.5h-9A6.5 6.5 0 0 0 4.5 18v1" /></>);

@@ -1,9 +1,7 @@
-import {
-  BadRequestException, Body, Controller, Get, HttpCode, HttpException, NotFoundException, Param, Post, Query, Req, Res,
-  UnauthorizedException, UseGuards,
-} from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, NotFoundException, Param, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { Readable } from "node:stream";
+import { runGuarded } from "./guarded";
 import { SessionGuard } from "./session.guard";
 import { SessionStore } from "./session.store";
 import { ID_RE, StalwartClient, StalwartError } from "./stalwart.client";
@@ -39,19 +37,8 @@ export class MailController {
   constructor(private readonly stalwart: StalwartClient, private readonly store: SessionStore) {}
 
   // Общая обработка ошибок Stalwart: отозванный доступ закрывает сессию, остальное это 502
-  private async guarded<T>(req: Request, fn: (s: SessionInfo) => Promise<T>): Promise<T> {
-    const r = req as SessionRequest;
-    try {
-      return await fn(r.dvSession);
-    } catch (e) {
-      if (e instanceof HttpException) throw e;
-      if (e instanceof StalwartError && e.kind === "auth") {
-        this.store.destroy(r.dvToken);
-        throw new UnauthorizedException({ message: "Требуется вход" });
-      }
-      if (e instanceof StalwartError && e.kind === "notfound") throw new NotFoundException({ message: "Письмо не найдено" });
-      throw new HttpException({ message: "Почтовый сервер недоступен, попробуйте позже" }, 502);
-    }
+  private guarded<T>(req: Request, fn: (s: SessionInfo) => Promise<T>): Promise<T> {
+    return runGuarded(this.store, req, fn);
   }
 
   private checkId(id: string): void {

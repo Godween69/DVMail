@@ -2,12 +2,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRef, type KeyboardEvent } from "react";
 import type { EmailItem } from "./api";
 import { initial, listDate, tone, who } from "./format";
-import { IconClip, IconMenu, IconMail, IconRefresh, IconSearch, IconX } from "./icons";
+import { IconClip, IconMenu, IconMail, IconPen, IconRefresh, IconSearch, IconX } from "./icons";
 
 interface Props {
   title: string; total: number; items: EmailItem[]; loading: boolean; error: string | null; hasMore: boolean;
   selectedId: string | null; showTo: boolean; query: string; refreshing: boolean;
-  onSelect: (id: string) => void; onMore: () => void; onQuery: (q: string) => void; onMenu: () => void; onRefresh: () => void; onRetry: () => void;
+  onSelect: (id: string) => void; onMore: () => void; onQuery: (q: string) => void; onMenu: () => void; onCompose: () => void; onRefresh: () => void; onRetry: () => void;
 }
 
 export function MessageList(p: Props) {
@@ -27,6 +27,7 @@ export function MessageList(p: Props) {
       <header className="list-head">
         <button className="icon-btn menu-btn" onClick={p.onMenu} aria-label="Папки" title="Папки"><IconMenu /></button>
         <div className="list-title"><h2>{p.title}</h2><span className="muted">{p.query ? `найдено: ${p.total}` : `${p.total}`}</span></div>
+        <button className="icon-btn compose-mini" onClick={p.onCompose} aria-label="Написать письмо" title="Написать письмо"><IconPen /></button>
         <button className={"icon-btn" + (p.refreshing ? " spin" : "")} onClick={p.onRefresh} aria-label="Обновить" title="Обновить"><IconRefresh /></button>
       </header>
       <div className="search">

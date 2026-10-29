@@ -2,11 +2,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type Addr, type EmailFull } from "./api";
 import { fileSize, fullDate, initial, tone, who } from "./format";
-import { IconAlert, IconBack, IconClip, IconCopy, IconDownload, IconExternal, IconFile, IconLink, IconLock, IconMail, IconMailOpen, IconTrash } from "./icons";
+import { IconAlert, IconBack, IconClip, IconCopy, IconDownload, IconExternal, IconFile, IconForward, IconLink, IconLock, IconMail, IconMailOpen, IconReply, IconReplyAll, IconTrash } from "./icons";
 import { frameDoc, prepareHtml, textLinks, type LinkInfo } from "./safe-html";
 
 interface Props {
   selected: boolean; mail: EmailFull | null; loading: boolean; error: string | null; inTrash: boolean; narrow: boolean;
+  onReply: () => void; onReplyAll: () => void; onForward: () => void;
   onBack: () => void; onToggleSeen: () => void; onTrash: () => void; onRetry: () => void; onCopied: (ok: boolean) => void;
 }
 
@@ -63,6 +64,9 @@ function Message(p: Props & { mail: EmailFull }) {
       <header className="mail-head">
         <div className="toolbar">
           {p.narrow && <button className="btn ghost small" onClick={p.onBack}><IconBack /> Назад</button>}
+          <button className="btn ghost small" onClick={p.onReply} title="Ответить"><IconReply /><span className="lbl">Ответить</span></button>
+          <button className="btn ghost small" onClick={p.onReplyAll} title="Ответить всем"><IconReplyAll /><span className="lbl">Всем</span></button>
+          <button className="btn ghost small" onClick={p.onForward} title="Переслать"><IconForward /><span className="lbl">Переслать</span></button>
           <span className="grow" />
           <motion.button className="btn ghost small" onClick={p.onToggleSeen} whileTap={{ scale: 0.96 }} title={m.unread ? "Отметить прочитанным" : "Отметить непрочитанным"}>
             {m.unread ? <><IconMailOpen /><span className="lbl">Прочитано</span></> : <><IconMail /><span className="lbl">Не прочитано</span></>}
