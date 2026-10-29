@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError, type EmailFull, type EmailItem, type Identity, type Mailbox } from "./api";
+import { api, ApiError, type Attachment, type EmailFull, type EmailItem, type Identity, type Limits, type Mailbox } from "./api";
+import { DEFAULT_LIMITS } from "./attachments";
 import { Compose } from "./Compose";
 import { buildDraft, emptyDraft, type ComposeMode, type Draft } from "./compose";
 import { folderLabel, sortMailboxes } from "./format";
@@ -14,7 +15,7 @@ const PAGE = 30;
 const POLL_MS = 60_000;
 
 interface ListState { items: EmailItem[]; total: number; loading: boolean; error: string | null }
-interface ComposeState { key: number; draft: Draft; identityId: string; note: string | null }
+interface ComposeState { key: number; draft: Draft; identityId: string; limits: Limits; keepFiles: Attachment[] }
 interface OpenState { id: string; data: EmailFull | null; loading: boolean; error: string | null }
 const msg = (e: unknown, fallback: string) => (e instanceof ApiError ? e.message : fallback);
 
@@ -149,9 +150,11 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
     // отвечаем с того адреса, на который пришло письмо, иначе с первого
     const got = mail ? [...mail.to, ...mail.cc].map((a) => a.email.toLowerCase()) : [];
     const identityId = (ids.find((i) => got.includes(i.email.toLowerCase())) ?? ids[0]).id;
-    const note = mode === "forward" && mail && mail.attachments.length > 0 ? "Вложения исходного письма не пересылаются: отправка вложений пока не поддерживается." : null;
+    // при пересылке вложения исходного письма подтягиваются в окно (их можно убрать), при ответе нет
+    const keepFiles = mode === "forward" && mail ? mail.attachments : [];
+    const limits = await api.limits().catch(() => DEFAULT_LIMITS); // нет ответа: действуют обычные 25 МБ, сервер проверит сам
     setDrawer(false);
-    setCompose({ key: Date.now(), draft, identityId, note });
+    setCompose({ key: Date.now(), draft, identityId, limits, keepFiles });
   }
   function sent(filed: boolean) {
     setCompose(null);
@@ -190,7 +193,7 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
         />
       )}
       <AnimatePresence>
-        {compose && <Compose key={compose.key} identities={identities ?? []} initial={compose.draft} identityId={compose.identityId} note={compose.note} onClose={() => setCompose(null)} onSent={sent} />}
+        {compose && <Compose key={compose.key} identities={identities ?? []} initial={compose.draft} identityId={compose.identityId} limits={compose.limits} keepFiles={compose.keepFiles} onClose={() => setCompose(null)} onSent={sent} />}
       </AnimatePresence>
       <div className="toasts" aria-live="polite">
         <AnimatePresence>

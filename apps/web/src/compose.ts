@@ -7,11 +7,12 @@ export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
 export interface Draft {
   mode: ComposeMode;
   replyTo: string | null; // id письма, на которое отвечаем (сервер сам возьмёт из него заголовки цепочки)
+  forwardOf: string | null; // id пересылаемого письма (из него сервер возьмёт оставленные вложения)
   to: string; cc: string; bcc: string; // адреса через запятую, как их видит пользователь
   subject: string; text: string;
 }
 
-export const emptyDraft = (): Draft => ({ mode: "new", replyTo: null, to: "", cc: "", bcc: "", subject: "", text: "" });
+export const emptyDraft = (): Draft => ({ mode: "new", replyTo: null, forwardOf: null, to: "", cc: "", bcc: "", subject: "", text: "" });
 
 // Такой же строгий вид адреса, как на сервере (сервер проверяет всё равно сам)
 export const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
@@ -64,11 +65,11 @@ export function buildDraft(mode: Exclude<ComposeMode, "new">, m: EmailFull, own:
       `Кому: ${m.to.map((a) => line(a)).join(", ") || "—"}`,
       ...(m.cc.length ? [`Копия: ${m.cc.map((a) => line(a)).join(", ")}`] : []),
     ].join("\n");
-    return { mode, replyTo: null, to: "", cc: "", bcc: "", subject: withPrefix(m.subject, /^(fwd?|пересл)\s*:/i, "Fwd: "), text: `\n\n${head}\n\n${body}` };
+    return { mode, replyTo: null, forwardOf: m.id, to: "", cc: "", bcc: "", subject: withPrefix(m.subject, /^(fwd?|пересл)\s*:/i, "Fwd: "), text: `\n\n${head}\n\n${body}` };
   }
   const target = (m.replyTo[0] ?? m.from)?.email ?? "";
   const quoted = `\n\n${fullDate(m.receivedAt)}, ${who(m.from)} ${m.from?.name ? `<${m.from.email}> ` : ""}написал(а):\n${quote(body)}`;
-  const base = { replyTo: m.id, bcc: "", subject: withPrefix(m.subject, /^(re|ответ)\s*:/i, "Re: "), text: quoted };
+  const base = { replyTo: m.id, forwardOf: null, bcc: "", subject: withPrefix(m.subject, /^(re|ответ)\s*:/i, "Re: "), text: quoted };
   if (mode === "reply") return { ...base, mode, to: target, cc: "" };
   const to = uniq([target, ...addrList(m.to)].filter((e) => e && (!mine(e) || same(e, target))));
   const cc = uniq(addrList(m.cc).filter((e) => !mine(e) && !to.some((t) => same(t, e))));

@@ -284,7 +284,7 @@ a { color: var(--accent); }
 .link-btn:hover { text-decoration: underline; }
 .c-note { margin: 4px 18px 0; }
 .c-text {
-  flex: 1; min-height: 200px; margin: 6px 0 0; padding: 12px 18px; border: 0; border-top: 1px solid var(--line); background: transparent;
+  flex: 1; min-height: 140px; margin: 6px 0 0; padding: 12px 18px; border: 0; border-top: 1px solid var(--line); background: transparent;
   outline: none; resize: none; font: inherit; font-size: 15px; line-height: 1.6;
 }
 .c-msg { overflow: hidden; padding: 0 18px; font-size: .88rem; }
@@ -294,6 +294,26 @@ a { color: var(--accent); }
 .c-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; width: 100%; font-size: .9rem; }
 .c-hint { font-size: .78rem; }
 .spinner { vertical-align: -3px; }
+/* Вложения: список файлов под текстом, полоска хода загрузки, подсказка при перетаскивании */
+.c-attach { padding: 6px 18px 6px; border-top: 1px solid var(--line); }
+.c-attach-head { margin-bottom: 4px; font-size: .78rem; }
+.c-files { display: flex; flex-direction: column; gap: 4px; max-height: 132px; overflow-y: auto; }
+.c-file {
+  display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 1px 3px 1px 10px;
+  border: 1px solid var(--line); border-radius: 10px; font-size: .86rem;
+  background: linear-gradient(180deg, var(--panel), var(--panel2));
+}
+.c-file > svg { flex: none; color: var(--muted); }
+.c-fname { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-fsize, .c-fnote { flex: none; font-size: .76rem; }
+.c-bar { flex: 0 0 90px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.c-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 65%, #fff)); transition: width .15s linear; }
+.c-file.error { border-color: var(--danger); }
+.c-ferr { flex: 0 1 auto; min-width: 0; font-size: .76rem; }
+.c-drop {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: 16px; background: rgba(8, 11, 18, .55); color: #fff; font-weight: 650;
+}
 @media (max-width: 999px) { .compose-mini { display: inline-grid; } }
 @media (max-width: 699px) {
   .compose-layer { padding: 0; }

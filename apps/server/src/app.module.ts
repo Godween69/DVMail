@@ -1,5 +1,7 @@
 import { DynamicModule, Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
+import { AttachmentRegistry } from "./attachments";
+import { AttachmentsController } from "./attachments.controller";
 import { AuthController } from "./auth.controller";
 import { AppConfig, CONFIG } from "./config";
 import { CsrfGuard } from "./csrf.guard";
@@ -16,11 +18,11 @@ export class AppModule {
   static forRoot(cfg: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, MailController, SendController],
+      controllers: [HealthController, AuthController, MailController, SendController, AttachmentsController],
       providers: [
         { provide: CONFIG, useValue: cfg },
         { provide: APP_GUARD, useClass: CsrfGuard }, // защита от подделки запросов на всех маршрутах
-        SessionStore, LoginLimiter, StalwartClient, SessionGuard,
+        SessionStore, LoginLimiter, StalwartClient, SessionGuard, AttachmentRegistry,
       ],
     };
   }

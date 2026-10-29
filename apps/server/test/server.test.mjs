@@ -22,6 +22,9 @@ const PDF = Buffer.from("%PDF-1.4 тестовое вложение");
 const part = (partId, blobId, type, size, extra = {}) => ({ partId, blobId, type, size, charset: null, disposition: null, name: null, cid: null, ...extra });
 // Что заглушка получила на отправку (для проверок) и режимы сбоев
 let SUBMITTED = [], newId = 0, failSubmitMethod = false;
+// Пределы, которые заглушка объявляет в описании сессии, задержка загрузки и принятые файлы
+let sessionMaxUpload = 50 * 1024 * 1024, sessionMaxAttachments = 50 * 1024 * 1024, uploadDelay = 0, upN = 0;
+const BLOBS = new Map();
 const MAILS = new Map();
 const addMail = (m) => MAILS.set(m.id, m);
 function resetMails() {
@@ -112,7 +115,23 @@ const mock = http.createServer((req, res) => {
   const mfa = req.headers.authorization === MFA_BASIC; // верный пароль, но нужен код
   if (!ok) return send(mfa ? 402 : 401, { status: mfa ? 402 : 401, title: mfa ? "MFA code required" : "Unauthorized" });
   if (req.method === "GET" && req.url === "/jmap/session") {
-    return send(200, { primaryAccounts: { "urn:ietf:params:jmap:mail": "a1" }, accounts: { a1: {} }, apiUrl: "https://mail.example/jmap" });
+    return send(200, {
+      primaryAccounts: { "urn:ietf:params:jmap:mail": "a1" }, accounts: { a1: {} }, apiUrl: "https://mail.example/jmap",
+      capabilities: {
+        "urn:ietf:params:jmap:core": { maxSizeUpload: sessionMaxUpload },
+        "urn:ietf:params:jmap:mail": { maxSizeAttachmentsPerEmail: sessionMaxAttachments },
+      },
+    });
+  }
+  if (req.method === "POST" && req.url === "/jmap/upload/a1/") {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => setTimeout(() => {
+      const body = Buffer.concat(chunks), blobId = "up" + ++upN;
+      BLOBS.set(blobId, { type: req.headers["content-type"], size: body.length });
+      send(201, { accountId: "a1", blobId, type: req.headers["content-type"], size: body.length });
+    }, uploadDelay));
+    return;
   }
   const dl = /^\/jmap\/download\/a1\/([^/]+)\/file\?accept=application%2Foctet-stream$/.exec(req.url ?? "");
   if (req.method === "GET" && dl) {
@@ -677,4 +696,163 @@ test("белый список JMAP: Identity/EmailSubmission доступны т
     assert.ok(r.status === 404 || (r.status === 200 && /text\/html/.test(r.headers.get("content-type") ?? "")), `${p} дал ${r.status}`);
     assert.ok(!/methodResponses|accountId/.test(t), `${p}: утечка JMAP`);
   }
+});
+
+
+// ================= Вложения =================
+const MB = 1024 * 1024;
+const up = (body, name, cookie, url, extra = {}) =>
+  fetch(url + "/api/attachments?name=" + encodeURIComponent(name), {
+    method: "POST", headers: { "X-Requested-With": "dvmail", Origin: ORIGIN, Cookie: cookie, "Content-Type": "application/pdf", ...extra }, body,
+  });
+const del = (id, cookie, url, extra = {}) =>
+  fetch(url + "/api/attachments/" + id, { method: "DELETE", headers: { "X-Requested-With": "dvmail", Origin: ORIGIN, Cookie: cookie, ...extra } });
+// свежий экземпляр сервера и вход (у каждого свой кэш пределов и свой список загруженных файлов)
+const fresh = async () => { const { url } = await start(); return { url, c: cookieOf(await login(url, EMAIL, PASS)) }; };
+
+test("вложения: пределы по умолчанию и пределы, объявленные Stalwart", async () => {
+  const a = await fresh();
+  assert.deepEqual(await (await get("/api/limits", a.c, a.url)).json(), { file: 25 * MB, total: 25 * MB, count: 20 });
+  sessionMaxUpload = 1000; sessionMaxAttachments = 3000;
+  const b = await fresh();
+  const lim = await (await get("/api/limits", b.c, b.url)).json(); // пределы читаются при первом обращении и запоминаются
+  sessionMaxUpload = 50 * MB; sessionMaxAttachments = 50 * MB;
+  assert.deepEqual(lim, { file: 1000, total: 3000, count: 20 });
+  assert.equal((await fetch(a.url + "/api/limits")).status, 401);
+});
+
+test("вложения: загрузка, имя очищается, тип сохраняется", async () => {
+  const { url, c } = await fresh();
+  const r = await up(Buffer.from("%PDF-1.4 данные"), "../../Мой счёт: 1?.pdf", c, url);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.match(j.blobId, /^up\d+$/);
+  assert.equal(j.size, Buffer.byteLength("%PDF-1.4 данные"));
+  assert.equal(j.type, "application/pdf");
+  assert.ok(!/[\\/:?]/.test(j.name) && j.name.endsWith(".pdf"), j.name);
+  assert.equal(BLOBS.get(j.blobId).size, j.size);
+});
+
+test("вложения: исполняемые файлы отклоняются по имени и по содержимому", async () => {
+  const { url, c } = await fresh();
+  for (const name of ["setup.exe", "run.BAT", "x.js", "tool.sh", "a.exe ", "b.exe.", "archive.msi"]) {
+    const r = await up(Buffer.from("текст"), name, c, url);
+    assert.equal(r.status, 400, name);
+    assert.match((await r.json()).message, /нельзя отправлять/);
+  }
+  // PE-файл под видом текста и ELF под видом картинки
+  const pe = Buffer.alloc(128); pe.write("MZ"); pe.writeUInt32LE(64, 0x3c); pe.write("PE\0\0", 64, "latin1");
+  assert.equal((await up(pe, "notes.txt", c, url)).status, 400);
+  assert.equal((await up(Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]), "photo.png", c, url, { "Content-Type": "image/png" })).status, 400);
+  // обычный текст, начинающийся с «MZ», проходит
+  assert.equal((await up(Buffer.from("MZ это просто текст"), "a.txt", c, url, { "Content-Type": "text/plain" })).status, 200);
+  assert.equal((await up(Buffer.alloc(0), "empty.pdf", c, url)).status, 400);
+});
+
+test("вложения: проверка до разбора тела (заголовок, сессия, размер, число одновременных)", async () => {
+  const { url, c } = await fresh();
+  assert.equal((await up(Buffer.from("x"), "a.pdf", c, url, { "X-Requested-With": "other" })).status, 403);
+  assert.equal((await up(Buffer.from("x"), "a.pdf", c, url, { Origin: "https://evil.example" })).status, 403);
+  assert.equal((await up(Buffer.from("x"), "a.pdf", "", url)).status, 401);
+  assert.equal((await del("up1", c, url, { "X-Requested-With": "other" })).status, 403);
+  // слишком большой объявленный размер отклоняется сразу, тело не читается
+  const code = await new Promise((resolve, reject) => {
+    const req = http.request(url + "/api/attachments?name=a.pdf", {
+      method: "POST", headers: { "X-Requested-With": "dvmail", Origin: ORIGIN, Cookie: c, "Content-Length": String(30 * MB), "Content-Type": "application/pdf" },
+    }, (res) => { resolve(res.statusCode); res.resume(); req.destroy(); });
+    req.on("error", reject);
+    req.write("x");
+  });
+  assert.equal(code, 413);
+});
+
+test("вложения: размер файла и сумма ограничены, в том числе тем, что объявляет Stalwart", async () => {
+  sessionMaxUpload = 1000; sessionMaxAttachments = 1500;
+  const { url, c } = await fresh();
+  await get("/api/limits", c, url); // пределы читаются при первом обращении и запоминаются
+  sessionMaxUpload = 50 * MB; sessionMaxAttachments = 50 * MB;
+  assert.equal((await up(Buffer.alloc(1200, 97), "big.pdf", c, url)).status, 413);
+  assert.equal((await up(Buffer.alloc(900, 97), "a.pdf", c, url)).status, 200);
+  const r = await up(Buffer.alloc(900, 97), "b.pdf", c, url);
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).message, /в сумме/);
+});
+
+test("вложения: не больше трёх одновременных загрузок с одной сессии", async () => {
+  const { url, c } = await fresh();
+  uploadDelay = 400;
+  const codes = (await Promise.all([1, 2, 3, 4].map((i) => up(Buffer.from("данные " + i), `f${i}.pdf`, c, url)))).map((r) => r.status);
+  uploadDelay = 0;
+  assert.deepEqual(codes.sort(), [200, 200, 200, 429]);
+});
+
+test("отправка с вложениями: файлы попадают в письмо, повторно использовать нельзя, чужие не принимаются", async () => {
+  resetMails();
+  const { url, c } = await fresh();
+  const a = await (await up(Buffer.from("первый"), "Счёт.pdf", c, url)).json();
+  const b = await (await up(Buffer.from("второй"), "фото.png", c, url, { "Content-Type": "image/png" })).json();
+  const r = await send({ ...OK_BODY, attachments: [a.blobId, b.blobId] }, c, url);
+  assert.equal(r.status, 200);
+  assert.deepEqual(SUBMITTED[0].mail.attachments, [
+    { blobId: a.blobId, type: "application/pdf", name: "Счёт.pdf", disposition: "attachment" },
+    { blobId: b.blobId, type: "image/png", name: "фото.png", disposition: "attachment" },
+  ]);
+  // тот же файл второй раз и выдуманный идентификатор: ничего не создаётся
+  const before = MAILS.size, subs = SUBMITTED.length;
+  assert.equal((await send({ ...OK_BODY, attachments: [a.blobId] }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, attachments: ["up999"] }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, attachments: "up1" }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, attachments: ["../x"] }, c, url)).status, 400);
+  assert.equal(MAILS.size, before); assert.equal(SUBMITTED.length, subs);
+  // файл другой сессии (того же ящика) тоже не принимается
+  const other = await fresh();
+  const o = await (await up(Buffer.from("чужой"), "o.pdf", other.c, other.url)).json();
+  assert.equal((await send({ ...OK_BODY, attachments: [o.blobId] }, c, url)).status, 400);
+});
+
+test("отправка с вложениями: убранный файл не уходит, письмо без вложений прежнее", async () => {
+  resetMails();
+  const { url, c } = await fresh();
+  const a = await (await up(Buffer.from("x"), "a.pdf", c, url)).json();
+  assert.equal((await del(a.blobId, c, url)).status, 200);
+  assert.equal((await del("../x", c, url)).status, 404);
+  assert.equal((await send({ ...OK_BODY, attachments: [a.blobId] }, c, url)).status, 400);
+  assert.equal((await send(OK_BODY, c, url)).status, 200);
+  assert.equal(SUBMITTED.at(-1).mail.attachments, undefined);
+});
+
+test("отправка с вложениями: общий размер сверяется ещё раз при отправке вместе с пересылаемыми", async () => {
+  resetMails();
+  sessionMaxAttachments = 1210;
+  const { url, c } = await fresh();
+  await get("/api/limits", c, url);
+  sessionMaxAttachments = 50 * MB;
+  const a = await (await up(Buffer.alloc(1200, 97), "a.pdf", c, url)).json();
+  const before = MAILS.size;
+  // загруженный файл (1200 Б) и пересылаемый blob-pdf вместе больше 1210 Б: отказ, письмо не создаётся
+  const r = await send({ ...OK_BODY, attachments: [a.blobId], forwardOf: "e1", keep: ["blob-pdf"] }, c, url);
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).message, /в сумме/);
+  assert.equal(MAILS.size, before);
+  // один загруженный файл помещается (и после отказа он остался в списке загруженных)
+  assert.equal((await send({ ...OK_BODY, attachments: [a.blobId] }, c, url)).status, 200);
+});
+
+test("пересылка: вложения исходного письма берутся с сервера, чужие и выдуманные отклоняются", async () => {
+  resetMails();
+  const { url, c } = await fresh();
+  const r = await send({ ...OK_BODY, forwardOf: "e1", keep: ["blob-pdf"] }, c, url);
+  assert.equal(r.status, 200);
+  const att = SUBMITTED[0].mail.attachments;
+  assert.equal(att.length, 1);
+  assert.equal(att[0].blobId, "blob-pdf");
+  assert.equal(att[0].type, "application/pdf");
+  assert.ok(!/[\\/]/.test(att[0].name), att[0].name);
+  const before = MAILS.size;
+  assert.equal((await send({ ...OK_BODY, forwardOf: "e1", keep: ["blob-chuzhoy"] }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, forwardOf: "e1", keep: ["blob-bad/../x"] }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, keep: ["blob-pdf"] }, c, url)).status, 400, "без письма-источника");
+  assert.equal((await send({ ...OK_BODY, forwardOf: "net-takogo", keep: ["blob-pdf"] }, c, url)).status, 400);
+  assert.equal((await send({ ...OK_BODY, forwardOf: 5, keep: [] }, c, url)).status, 400);
+  assert.equal(MAILS.size, before);
 });

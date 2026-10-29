@@ -3,7 +3,7 @@ import { AppConfig, CONFIG } from "./config";
 import type { SessionInfo } from "./types";
 
 export class StalwartError extends Error {
-  constructor(public readonly kind: "auth" | "unavailable" | "protocol" | "notfound", message: string) {
+  constructor(public readonly kind: "auth" | "unavailable" | "protocol" | "notfound" | "toolarge", message: string) {
     super(message);
   }
 }
@@ -20,8 +20,13 @@ export const ID_RE = /^[A-Za-z0-9._~-]{1,200}$/;
 
 export type JmapCall = [method: string, args: Record<string, unknown>];
 
+/** Пределы, которые объявляет сам Stalwart (null: не объявлены) */
+export interface ServerLimits { maxUpload: number | null; maxAttachments: number | null }
+
 @Injectable()
 export class StalwartClient {
+  private readonly limitsCache = new Map<string, { at: number; v: ServerLimits }>();
+
   constructor(@Inject(CONFIG) private readonly cfg: AppConfig) {}
 
   private async request(path: string, email: string, password: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<Response> {
@@ -95,5 +100,36 @@ export class StalwartClient {
     if (r.status === 404) throw new StalwartError("notfound", "не найдено");
     if (!r.ok || !r.body) throw new StalwartError("unavailable", `ответ ${r.status}`);
     return r;
+  }
+
+  /** Пределы размера, которые сообщает Stalwart в описании сессии (кэш на 10 минут). Недоступно или не объявлено: null. */
+  async limits(s: SessionInfo): Promise<ServerLimits> {
+    const hit = this.limitsCache.get(s.accountId);
+    if (hit && Date.now() - hit.at < 600_000) return hit.v;
+    const r = await this.request("/jmap/session", s.email, s.password);
+    if (r.status === 401 || r.status === 402 || r.status === 403) throw new StalwartError("auth", "доступ отозван");
+    const j = r.ok ? ((await r.json().catch(() => null)) as { capabilities?: Record<string, Record<string, unknown>> } | null) : null;
+    const pos = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+    const v: ServerLimits = {
+      maxUpload: pos(j?.capabilities?.["urn:ietf:params:jmap:core"]?.maxSizeUpload),
+      maxAttachments: pos(j?.capabilities?.[MAIL_CAP]?.maxSizeAttachmentsPerEmail),
+    };
+    if (this.limitsCache.size > 500) this.limitsCache.clear();
+    this.limitsCache.set(s.accountId, { at: Date.now(), v });
+    return v;
+  }
+
+  /** Загрузка файла в Stalwart (получаем идентификатор для вложения). Файл целиком в памяти, размер проверен заранее. */
+  async upload(s: SessionInfo, type: string, body: Buffer): Promise<{ blobId: string; size: number }> {
+    if (!ID_RE.test(s.accountId)) throw new StalwartError("protocol", "неверный идентификатор");
+    const r = await this.request(`/jmap/upload/${s.accountId}/`, s.email, s.password, {
+      method: "POST", headers: { "Content-Type": type }, body: new Uint8Array(body),
+    }, 180_000);
+    if (r.status === 401 || r.status === 402 || r.status === 403) throw new StalwartError("auth", "доступ отозван");
+    if (r.status === 413) throw new StalwartError("toolarge", "сервер не принял файл: слишком большой");
+    if (!r.ok) throw new StalwartError("unavailable", `ответ ${r.status}`);
+    const j = (await r.json().catch(() => null)) as { blobId?: unknown; size?: unknown } | null;
+    if (typeof j?.blobId !== "string" || !ID_RE.test(j.blobId)) throw new StalwartError("protocol", "в ответе нет идентификатора файла");
+    return { blobId: j.blobId, size: typeof j.size === "number" ? j.size : body.length };
   }
 }

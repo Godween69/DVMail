@@ -1,10 +1,11 @@
 import { BadRequestException, Body, Controller, Get, HttpCode, HttpException, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
+import { AttachmentRegistry, effectiveLimits, MAX_FILES, megabytes, safeName, safeType } from "./attachments";
 import { runGuarded } from "./guarded";
 import { SessionGuard } from "./session.guard";
 import { SessionStore } from "./session.store";
 import { ID_RE, StalwartClient, StalwartError } from "./stalwart.client";
-import type { SessionInfo } from "./types";
+import type { SessionInfo, SessionRequest } from "./types";
 
 type Obj = Record<string, unknown>;
 interface Identity { id: string; name: string; email: string }
@@ -49,7 +50,7 @@ const SUBMIT_ERRORS: Record<string, string> = {
 export class SendController {
   private readonly sends = new Map<string, number[]>();
 
-  constructor(private readonly stalwart: StalwartClient, private readonly store: SessionStore) {}
+  constructor(private readonly stalwart: StalwartClient, private readonly store: SessionStore, private readonly files: AttachmentRegistry) {}
 
   private guarded<T>(req: Request, fn: (s: SessionInfo) => Promise<T>): Promise<T> {
     return runGuarded(this.store, req, fn);
@@ -108,6 +109,21 @@ export class SendController {
     const replyTo = b.replyTo === undefined || b.replyTo === null ? null : typeof b.replyTo === "string" && ID_RE.test(b.replyTo) ? b.replyTo : "";
     if (replyTo === "") throw bad("Неверный идентификатор письма, на которое отвечаете");
 
+    // вложения: загруженные в этой сессии файлы и (для пересылки) вложения исходного письма
+    const ids = (v: unknown, label: string): string[] => {
+      if (v === undefined || v === null) return [];
+      if (!Array.isArray(v) || v.length > MAX_FILES || v.some((x) => typeof x !== "string" || !ID_RE.test(x))) throw bad(`Неверный список файлов (${label})`);
+      return [...new Set(v as string[])];
+    };
+    const uploaded = ids(b.attachments, "вложения"), keep = ids(b.keep, "пересылаемые");
+    const forwardOf = b.forwardOf === undefined || b.forwardOf === null ? null : typeof b.forwardOf === "string" && ID_RE.test(b.forwardOf) ? b.forwardOf : "";
+    if (forwardOf === "") throw bad("Неверный идентификатор пересылаемого письма");
+    if (keep.length > 0 && !forwardOf) throw bad("Пересылаемые вложения без письма");
+    if (uploaded.length + keep.length > MAX_FILES) throw bad(`Не больше ${MAX_FILES} файлов в письме`);
+    const token = (req as SessionRequest).dvToken;
+    const mine = this.files.list(token);
+    if (uploaded.some((id) => !mine.has(id))) throw bad("Один из файлов потерялся (сессия обновилась). Прикрепите его заново.");
+
     return this.guarded(req, async (s) => {
       const wait = this.limit(s.email);
       if (wait > 0) throw new HttpException({ message: `Лимит отправки: не больше ${SENDS_PER_HOUR} писем в час. Попробуйте позже.` }, 429);
@@ -118,8 +134,13 @@ export class SendController {
         ["Mailbox/get", { properties: ["id", "role"] }],
       ];
       if (replyTo) calls.push(["Email/get", { ids: [replyTo], properties: ["messageId", "inReplyTo", "references"] }]);
-      const [ids, boxes, orig] = await this.stalwart.batch(s, calls);
-      const identity = (Array.isArray(ids.list) ? (ids.list as Obj[]) : []).find((i) => i.id === identityId);
+      if (forwardOf && keep.length) calls.push(["Email/get", { ids: [forwardOf], properties: ["attachments"] }]);
+      const res = await this.stalwart.batch(s, calls);
+      const [idsRes, boxes] = res;
+      let at = 2;
+      const orig = replyTo ? res[at++] : undefined;
+      const fwd = forwardOf && keep.length ? res[at++] : undefined;
+      const identity = (Array.isArray(idsRes.list) ? (idsRes.list as Obj[]) : []).find((i) => i.id === identityId);
       if (!identity || typeof identity.email !== "string" || !EMAIL_RE.test(identity.email)) throw bad("Этот адрес отправителя недоступен");
       const roleId = (role: string) => {
         const id = (Array.isArray(boxes.list) ? (boxes.list as Obj[]) : []).find((m) => m.role === role)?.id;
@@ -135,6 +156,26 @@ export class SendController {
       const inReplyTo = origMail ? msgIds(origMail.messageId).slice(0, 1) : [];
       const references = origMail ? [...msgIds(origMail.references ?? origMail.inReplyTo), ...inReplyTo].slice(-MAX_REFS) : [];
 
+      // вложения: свои загруженные файлы и (для пересылки) вложения исходного письма, найденные у самого письма
+      const parts: { blobId: string; type: string; name: string; size: number }[] = uploaded.map((id) => {
+        const a = mine.get(id)!;
+        return { blobId: id, type: a.type, name: a.name, size: a.size };
+      });
+      if (keep.length) {
+        const m = (Array.isArray(fwd?.list) ? ((fwd!.list as Obj[])[0] as Obj | undefined) : undefined);
+        const have = (Array.isArray(m?.attachments) ? (m!.attachments as Obj[]) : []).filter((a) => typeof a.blobId === "string" && ID_RE.test(a.blobId));
+        for (const id of keep) {
+          const a = have.find((x) => x.blobId === id);
+          if (!a) throw bad("Вложение пересылаемого письма не найдено");
+          parts.push({ blobId: id, type: safeType(a.type), name: safeName(a.name, "вложение"), size: typeof a.size === "number" ? a.size : 0 });
+        }
+      }
+      if (parts.length) {
+        const lim = effectiveLimits(await this.stalwart.limits(s));
+        const sum = parts.reduce((n, a) => n + a.size, 0);
+        if (sum > lim.total) throw bad(`Вложения не больше ${megabytes(lim.total)} в сумме`);
+      }
+
       // 2. Черновик (пометка «прочитано», чтобы счётчик непрочитанных не менялся)
       const draft: Obj = {
         mailboxIds: { [drafts]: true },
@@ -145,6 +186,7 @@ export class SendController {
         textBody: [{ partId: "1", type: "text/plain" }],
         bodyValues: { 1: { value: text } },
       };
+      if (parts.length) draft.attachments = parts.map((a) => ({ blobId: a.blobId, type: a.type, name: a.name, disposition: "attachment" }));
       if (cc.length) draft.cc = cc.map((email) => ({ email }));
       if (bcc.length) draft.bcc = bcc.map((email) => ({ email }));
       if (inReplyTo.length) draft.inReplyTo = inReplyTo;
@@ -185,6 +227,7 @@ export class SendController {
         if (e instanceof StalwartError && e.kind === "auth") throw e;
         filed = false;
       }
+      this.files.remove(token, uploaded); // файлы ушли с письмом, из списка загруженных убираем
       return { ok: true, filed };
     });
   }
