@@ -9,7 +9,20 @@ import { StalwartClient, StalwartError } from "./stalwart.client";
 import type { SessionRequest } from "./types";
 
 // Для неверного пароля и для несуществующего адреса ответ один и тот же
-const BAD = "Неверный адрес или пароль приложения";
+// Подсказка про двухфакторку есть всегда: иначе ответ выдал бы, что пароль верный, а не хватает только кода
+const BAD = "Неверный адрес или пароль. Если у ящика включена двухфакторная защита, нужен пароль приложения.";
+// Для IPv6 лимит считаем по сети /64: владелец сети легко меняет последние 64 бита адреса
+export function netKey(ip: string | undefined): string {
+  if (!ip) return "unknown";
+  const v4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (v4) return v4[1];
+  if (!ip.includes(":")) return ip;
+  const full = ip.toLowerCase().split("::");
+  const head = full[0] ? full[0].split(":") : [];
+  const tail = full[1] ? full[1].split(":") : [];
+  const groups = full.length === 2 ? [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail] : head;
+  return groups.slice(0, 4).map((g) => g.padStart(4, "0")).join(":") + "::/64";
+}
 const EMAIL_RE = /^[^\s@\x00-\x1f]{1,64}@[a-z0-9.-]{1,190}$/i;
 
 @Controller("api/auth")
@@ -27,7 +40,7 @@ export class AuthController {
     const b = (body ?? {}) as Record<string, unknown>;
     const email = typeof b.email === "string" ? b.email.trim().toLowerCase() : "";
     const password = typeof b.password === "string" ? b.password : "";
-    const ip = req.ip ?? "unknown";
+    const ip = netKey(req.ip);
 
     const wait = this.limiter.waitSeconds(ip, email);
     if (wait > 0) {

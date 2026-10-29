@@ -9,6 +9,8 @@
     "build": "tsc --noEmit && vite build"
   },
   "dependencies": {
+    "dompurify": "3.4.17",
+    "motion": "14.7.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

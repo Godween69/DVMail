@@ -35,10 +35,12 @@ export class LoginLimiter {
 
   fail(ip: string, email: string): void {
     const now = Date.now();
-    if (this.fails.size > 10_000) this.fails.clear(); // защита от раздувания памяти
     for (const key of [`ip:${ip}`, `pair:${ip}|${email}`]) {
       this.fails.set(key, [...this.recent(key, now), now]);
     }
+    // Защита от раздувания памяти: убираем самые старые записи. Полная очистка позволила бы сбросить
+    // чужие счётчики, забросав сервис выдуманными адресами.
+    while (this.fails.size > 10_000) this.fails.delete(this.fails.keys().next().value as string);
   }
 
   ok(ip: string, email: string): void {

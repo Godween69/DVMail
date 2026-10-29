@@ -1,5 +1,5 @@
-import { CanActivate, ExecutionContext, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
-import type { Request } from "express";
+import { CanActivate, ExecutionContext, HttpException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import type { Request, Response } from "express";
 import { AppConfig, CONFIG } from "./config";
 import { readCookie } from "./cookies";
 import { SessionStore } from "./session.store";
@@ -15,6 +15,11 @@ export class SessionGuard implements CanActivate {
     const token = readCookie(req.headers.cookie, this.cfg.cookieName);
     const session = this.store.get(token);
     if (!session || !token) throw new UnauthorizedException({ message: "Требуется вход" });
+    const wait = this.store.throttle(token);
+    if (wait > 0) {
+      ctx.switchToHttp().getResponse<Response>().setHeader("Retry-After", String(wait));
+      throw new HttpException({ message: "Слишком много запросов. Подождите немного." }, 429);
+    }
     (req as SessionRequest).dvSession = session;
     (req as SessionRequest).dvToken = token;
     return true;

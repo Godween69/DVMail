@@ -11,6 +11,7 @@ interface Stored {
   accountId: string;
   created: number;
   seen: number;
+  hits: number[];   // время последних запросов (для ограничения частоты)
 }
 
 // Идея: в cookie лежит случайный токен (32 байта). На сервере хранится только его хеш (для поиска)
@@ -39,14 +40,35 @@ export class SessionStore implements OnModuleDestroy {
     return Buffer.from(hkdfSync("sha256", Buffer.from(token, "base64url"), Buffer.alloc(0), "dvmail-session-v1", 32));
   }
 
+  private evictOldest(match: (s: Stored) => boolean, limit: number): void {
+    const list = [...this.map.entries()].filter(([, s]) => match(s));
+    if (list.length < limit) return;
+    list.sort((a, b) => a[1].created - b[1].created);
+    for (const [k] of list.slice(0, list.length - limit + 1)) this.map.delete(k);
+  }
+
+  /** Ограничение частоты запросов одной сессии. Возвращает, сколько секунд подождать (0: можно). */
+  throttle(token: string | undefined): number {
+    const s = token ? this.map.get(this.lookupKey(token)) : undefined;
+    if (!s) return 0;
+    const now = Date.now();
+    s.hits = s.hits.filter((t) => now - t < 60_000);
+    if (s.hits.length >= this.cfg.maxRequestsPerMinute) return Math.max(1, Math.ceil((s.hits[0] + 60_000 - now) / 1000));
+    s.hits.push(now);
+    return 0;
+  }
+
   create(info: SessionInfo): string {
+    // Не больше 8 открытых сессий на ящик и 2000 в целом: старые закрываются, память не раздувается
+    this.evictOldest((s) => s.email === info.email, 8);
+    this.evictOldest(() => true, 2000);
     const token = randomBytes(32).toString("base64url");
     const iv = randomBytes(12);
     const cipher = createCipheriv("aes-256-gcm", this.aesKey(token), iv);
     const ct = Buffer.concat([cipher.update(info.password, "utf8"), cipher.final()]);
     const now = Date.now();
     this.map.set(this.lookupKey(token), {
-      iv, ct, tag: cipher.getAuthTag(), email: info.email, accountId: info.accountId, created: now, seen: now,
+      iv, ct, tag: cipher.getAuthTag(), email: info.email, accountId: info.accountId, created: now, seen: now, hits: [],
     });
     return token;
   }
