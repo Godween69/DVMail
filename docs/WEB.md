@@ -55,7 +55,8 @@ React и работает посредником между браузером �
 - GET /api/emails?mailbox=...&position=...&limit=...&q=...
 - GET /api/emails/:id
 - POST /api/emails/:id/seen, POST /api/emails/:id/trash
-- POST /api/send
+- POST /api/send, GET /api/contacts (подсказки адресов)
+- GET /api/limits, POST /api/attachments, DELETE /api/attachments/:blobId (вложения при отправке)
 - GET /api/emails/:id/raw, GET /api/emails/:id/attachments/:blobId
 - GET /health
 
@@ -65,7 +66,7 @@ Email/get, Email/set, Identity/get и EmailSubmission/set, причём Email/se
 письма при отправке), а Identity/get только читает. Идентификаторы проверяются по строгому шаблону, вложение
 отдаётся только если оно действительно принадлежит этому письму.
 
-Настройки (переменные окружения):
+Настройки (переменные окружения; установка целиком описана в docs/DEPLOY.md):
 
 - STALWART_URL: внутренний адрес Stalwart
 - HOST и PORT: адрес и порт (по умолчанию 127.0.0.1:3000)
