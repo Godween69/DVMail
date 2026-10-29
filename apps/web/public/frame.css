@@ -1,0 +1,11 @@
+/* Оформление текста письма внутри изолированного окна (iframe без скриптов).
+   Подключается файлом: встроенные стили в окне запрещены политикой страницы. */
+html { background: #fff; }
+body { margin: 0; color: #1b2230; font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-wrap: anywhere; }
+.msg { padding: 20px 24px 32px; max-width: 920px; }
+img { max-width: 100%; height: auto; }
+table { max-width: 100%; }
+blockquote { margin: 8px 0; padding: 0 0 0 12px; border-left: 3px solid #d5dbe8; color: #566074; }
+a { color: #2a5ac8; text-decoration: underline dotted; cursor: default; }
+pre { white-space: pre-wrap; }
+.blocked { display: inline-block; padding: 2px 8px; border: 1px dashed #b7c0d2; border-radius: 6px; color: #6a7488; font-size: 12px; }
