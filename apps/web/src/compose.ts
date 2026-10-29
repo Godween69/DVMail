@@ -1,5 +1,5 @@
 // Подготовка нового письма: ответ, ответ всем, пересылка. Чистые функции без обращения к сети (их можно проверять тестами).
-import type { Addr, EmailFull } from "./api";
+import type { Addr, Contact, EmailFull } from "./api";
 import { fullDate, who } from "./format";
 
 export type ComposeMode = "new" | "reply" | "replyAll" | "forward";
@@ -30,6 +30,48 @@ export function parseAddresses(input: string): { ok: string[]; bad: string[] } {
     if (!seen.has(k)) { seen.add(k); ok.push(a); }
   }
   return { ok, bad };
+}
+
+/** Адрес, который человек набирает сейчас: часть поля от последнего разделителя до курсора */
+export function currentToken(value: string, caret: number = value.length): { start: number; text: string } {
+  const c = Math.max(0, Math.min(caret, value.length));
+  const before = value.slice(0, c);
+  const i = Math.max(before.lastIndexOf(","), before.lastIndexOf(";"), before.lastIndexOf("\n"));
+  const raw = before.slice(i + 1);
+  const text = raw.trimStart();
+  return { start: i + 1 + (raw.length - text.length), text };
+}
+
+/** Подсказки по набранным буквам: сначала совпадения с начала адреса, имени или слова имени, потом (от трёх букв) из середины.
+ *  Порядок внутри групп как у сервера (самые нужные сверху). taken: адреса, которые уже стоят в поле. */
+export function findContacts(list: Contact[], text: string, taken: string[], max = 6): Contact[] {
+  const norm = (v: string) => v.toLowerCase().replace(/ё/g, "е"); // «Пётр» находится и по «петр»
+  const q = norm(text.trim());
+  if (!q || q.length > 64 || /[<>]/.test(q)) return [];
+  const skip = new Set(taken.map((t) => t.toLowerCase()));
+  const head: Contact[] = [], rest: Contact[] = [];
+  for (const c of list) {
+    const email = norm(c.email), name = norm(c.name);
+    if (skip.has(c.email.toLowerCase()) || email === q) continue;
+    if (email.startsWith(q) || name.startsWith(q) || name.split(/[\s.-]+/).some((w) => w && w.startsWith(q))) head.push(c);
+    else if (q.length >= 3 && (email.includes(q) || name.includes(q))) rest.push(c); // из середины слова только от трёх букв: «ан» не тянет «Иван»
+    if (head.length >= max) break;
+  }
+  return [...head, ...rest].slice(0, max);
+}
+
+/** Как адрес вставляется в поле: «Имя <адрес>» или просто адрес */
+export const contactLabel = (c: Contact): string => {
+  const name = c.name.replace(/[<>",;]/g, "").trim();
+  return name ? `${name} <${c.email}>` : c.email;
+};
+
+/** Подставить выбранный адрес вместо набранных букв, добавить запятую для следующего. Возвращает новый текст и место курсора. */
+export function applyContact(value: string, caret: number, c: Contact): { value: string; caret: number } {
+  const at = Math.max(0, Math.min(caret, value.length));
+  const { start } = currentToken(value, at);
+  const head = value.slice(0, start) + contactLabel(c) + ", ";
+  return { value: head + value.slice(at).replace(/^[ \t]*[,;]?[ \t]*/, ""), caret: head.length };
 }
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();

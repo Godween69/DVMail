@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
-import { api, ApiError, type Attachment, type Identity, type Limits } from "./api";
+import { AddressField } from "./AddressField";
+import { api, ApiError, type Attachment, type Contact, type Identity, type Limits } from "./api";
 import { checkAdd, mb, PARALLEL, sendBlocker, usedBytes, type AttItem } from "./attachments";
 import { isDirty, parseAddresses, type Draft } from "./compose";
 import { fileSize } from "./format";
@@ -26,6 +27,7 @@ export function Compose({ identities, initial, identityId, limits, keepFiles, on
   const [askClose, setAskClose] = useState(false);
   const [askNoSubject, setAskNoSubject] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]); // подсказки адресов; нет ответа: просто без подсказок
   // вложения пересылаемого письма уже на сервере: сразу в списке как готовые
   const [items, setItems] = useState<AttItem[]>(() =>
     keepFiles.map((a, i) => ({ key: "k" + i, name: a.name, size: a.size, state: "done" as const, progress: 1, blobId: a.blobId, keep: true })));
@@ -49,6 +51,12 @@ export function Compose({ identities, initial, identityId, limits, keepFiles, on
     if (initial.to) { const t = textRef.current; if (t) { t.focus(); t.setSelectionRange(0, 0); t.scrollTop = 0; } }
     else toRef.current?.focus();
   }, [initial.to]);
+
+  useEffect(() => {
+    let alive = true;
+    api.contacts().then((c) => { if (alive) setContacts(c); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // ---- Вложения
   function startUpload(key: string) {
@@ -190,7 +198,7 @@ export function Compose({ identities, initial, identityId, limits, keepFiles, on
           </div>
           <div className="c-row">
             <label htmlFor={id + "t"}>Кому</label>
-            <input id={id + "t"} ref={toRef} value={d.to} onChange={(e) => set("to")(e.target.value)} disabled={sending} autoComplete="off" spellCheck={false} maxLength={4000} placeholder="адрес, можно несколько через запятую" />
+            <AddressField id={id + "t"} inputRef={toRef} value={d.to} onChange={set("to")} contacts={contacts} disabled={sending} maxLength={4000} placeholder="адрес, можно несколько через запятую" />
             <span className="c-more">
               {!showCc && <button type="button" className="link-btn" onClick={() => setShowCc(true)}>Копия</button>}
               {!showBcc && <button type="button" className="link-btn" onClick={() => setShowBcc(true)}>Скрытая</button>}
@@ -198,11 +206,11 @@ export function Compose({ identities, initial, identityId, limits, keepFiles, on
           </div>
           {showCc && (
             <div className="c-row"><label htmlFor={id + "c"}>Копия</label>
-              <input id={id + "c"} value={d.cc} onChange={(e) => set("cc")(e.target.value)} disabled={sending} autoComplete="off" spellCheck={false} maxLength={4000} /></div>
+              <AddressField id={id + "c"} value={d.cc} onChange={set("cc")} contacts={contacts} disabled={sending} maxLength={4000} /></div>
           )}
           {showBcc && (
             <div className="c-row"><label htmlFor={id + "b"}>Скрытая</label>
-              <input id={id + "b"} value={d.bcc} onChange={(e) => set("bcc")(e.target.value)} disabled={sending} autoComplete="off" spellCheck={false} maxLength={4000} placeholder="получатели не увидят этот адрес друг у друга" /></div>
+              <AddressField id={id + "b"} value={d.bcc} onChange={set("bcc")} contacts={contacts} disabled={sending} maxLength={4000} placeholder="получатели не увидят этот адрес друг у друга" /></div>
           )}
           <div className="c-row">
             <label htmlFor={id + "s"}>Тема</label>

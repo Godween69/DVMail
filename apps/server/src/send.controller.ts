@@ -18,7 +18,7 @@ const MAX_REFS = 20;             // длина цепочки «на какие 
 const SENDS_PER_HOUR = 40;       // писем в час с одного ящика (защита, если чужой получит доступ к сессии)
 
 // Простой и строгий вид адреса: без пробелов, скобок, кавычек и управляющих знаков (никаких вставок в заголовки)
-const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
+export const EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 
 const bad = (message: string) => new BadRequestException({ message });
 const oneLine = (v: unknown, max: number): string =>

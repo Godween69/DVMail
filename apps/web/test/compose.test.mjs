@@ -81,3 +81,48 @@ test("изменения в окне письма замечаются", () => {
   assert.equal(isDirty(a, a), false);
   assert.equal(isDirty({ ...a, text: "x" }, a), true);
 });
+
+// ---- Подсказки адресов
+const { currentToken, findContacts, applyContact, contactLabel } = await import(pathToFileURL(join(out, "compose.mjs")).href);
+const C = (email, name = "") => ({ name, email });
+const BOOK = [C("bob@example.org", "Боб Смирнов"), C("anna@example.org", "Анна Петрова"), C("petr@work.example", "Пётр"), C("carl@example.org"), C("anna.p@mail.example", "Анна Попова")];
+
+test("подсказки: набираемый адрес это часть после последнего разделителя до курсора", () => {
+  assert.deepEqual(currentToken("a@example.org, bo"), { start: 15, text: "bo" });
+  assert.deepEqual(currentToken("bo"), { start: 0, text: "bo" });
+  assert.deepEqual(currentToken("a@example.org; \n  bo"), { start: 18, text: "bo" });
+  assert.deepEqual(currentToken("a@example.org, bo, c@example.org", 17), { start: 15, text: "bo" }, "курсор в середине");
+  assert.deepEqual(currentToken(""), { start: 0, text: "" });
+  assert.deepEqual(currentToken("abc", 99), { start: 0, text: "abc" }, "курсор за пределами");
+});
+
+test("подсказки: поиск по началу адреса, имени и слова имени, потом по середине; уже стоящие не повторяются", () => {
+  const e = (t, taken = []) => findContacts(BOOK, t, taken).map((c) => c.email);
+  assert.deepEqual(e("bo"), ["bob@example.org"]);
+  assert.deepEqual(e("анна"), ["anna@example.org", "anna.p@mail.example"], "порядок как у сервера");
+  assert.deepEqual(e("петр"), ["anna@example.org", "petr@work.example"], "«Петрова» и «Пётр» (е и ё одно и то же)");
+  assert.deepEqual(e("пёт"), ["anna@example.org", "petr@work.example"]);
+  assert.deepEqual(e("смир"), ["bob@example.org"], "начало второго слова имени");
+  assert.deepEqual(e("example").slice(0, 2), ["bob@example.org", "anna@example.org"], "из середины адреса");
+  assert.deepEqual(e("anna", ["ANNA@example.org"]), ["anna.p@mail.example"], "уже в поле: пропускаем без учёта регистра");
+  assert.deepEqual(e("carl@example.org"), [], "адрес набран целиком: подсказывать нечего");
+  assert.deepEqual(e("ан").length, 2, "из середины слова от двух букв не ищем: «Иван» не мешает");
+  assert.deepEqual(e("мир"), ["bob@example.org"], "от трёх букв ищем и в середине: «Смирнов»");
+  assert.deepEqual(e(""), []);
+  assert.deepEqual(e("   "), []);
+  assert.deepEqual(e("a<b"), [], "угловые скобки: адрес уже оформлен");
+  assert.deepEqual(e("ё".repeat(80)), []);
+  assert.equal(findContacts(Array.from({ length: 50 }, (_, i) => C(`u${i}@example.org`)), "u", [], 6).length, 6, "не больше шести");
+});
+
+test("подсказки: вставка заменяет набранные буквы, ставит запятую и курсор после неё", () => {
+  const bob = C("bob@example.org", "Боб Смирнов");
+  assert.deepEqual(applyContact("a@example.org, bo", 17, bob), { value: "a@example.org, Боб Смирнов <bob@example.org>, ", caret: 46 });
+  assert.deepEqual(applyContact("bo", 2, C("bob@example.org")), { value: "bob@example.org, ", caret: 17 });
+  const mid = applyContact("a@example.org, bo, c@example.org", 17, bob);
+  assert.equal(mid.value, "a@example.org, Боб Смирнов <bob@example.org>, c@example.org", "хвост остаётся, лишней запятой нет");
+  assert.equal(mid.caret, 46);
+  assert.equal(contactLabel(C("x@example.org", 'Ты <"злой">, имя;')), "Ты злой имя <x@example.org>", "знаки, ломающие запись, убраны");
+  // вставленное разбирается обратно в нужный адрес
+  assert.deepEqual(parseAddresses(applyContact("", 0, bob).value).ok, ["bob@example.org"]);
+});

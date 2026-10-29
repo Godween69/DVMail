@@ -4,6 +4,7 @@ import { AttachmentRegistry } from "./attachments";
 import { AttachmentsController } from "./attachments.controller";
 import { AuthController } from "./auth.controller";
 import { AppConfig, CONFIG } from "./config";
+import { ContactsController } from "./contacts.controller";
 import { CsrfGuard } from "./csrf.guard";
 import { HealthController } from "./health.controller";
 import { LoginLimiter } from "./login-limiter";
@@ -18,7 +19,7 @@ export class AppModule {
   static forRoot(cfg: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, MailController, SendController, AttachmentsController],
+      controllers: [HealthController, AuthController, MailController, SendController, AttachmentsController, ContactsController],
       providers: [
         { provide: CONFIG, useValue: cfg },
         { provide: APP_GUARD, useClass: CsrfGuard }, // защита от подделки запросов на всех маршрутах

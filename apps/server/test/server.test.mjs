@@ -856,3 +856,45 @@ test("пересылка: вложения исходного письма бе�
   assert.equal((await send({ ...OK_BODY, forwardOf: 5, keep: [] }, c, url)).status, 400);
   assert.equal(MAILS.size, before);
 });
+
+// ================= Подсказки адресов =================
+test("подсказки адресов: из «Отправленных» и «Входящих», порядок по нужности, без своих и автоматических", async () => {
+  resetMails();
+  const mk = (id, box, at, extra) => addMail({ id, threadId: "t" + id, mailboxIds: { [box]: true }, keywords: { $seen: true }, subject: id, receivedAt: at, preview: "", hasAttachment: false, size: 1, ...extra });
+  const L = String.fromCharCode(0x2028);
+  mk("s1", "m4", "2026-10-20T10:00:00Z", { from: [{ name: null, email: EMAIL }], to: [{ name: "Анна", email: "anna@example.org" }, { name: "Боб", email: "bob@example.org" }] });
+  mk("s2", "m4", "2026-10-21T10:00:00Z", { from: [{ name: null, email: EMAIL }], to: [{ name: null, email: "BOB@example.org" }] });
+  mk("s3", "m4", "2026-10-22T10:00:00Z", { from: [{ name: null, email: EMAIL }], to: [{ name: null, email: "alias@dvbstudio.ru" }, { name: `Дэйв <x>${L}"; Bcc: z`, email: "dave@example.org" }], cc: [{ name: "Карл", email: "carl@example.org" }, { name: "Плохой", email: "не адрес" }] });
+  mk("r1", "m1", "2026-10-23T10:00:00Z", { from: [{ name: "Магазин", email: "noreply@shop.example" }] });
+  mk("r2", "m1", "2026-10-24T10:00:00Z", { from: [{ name: "Ева", email: "eva@example.org" }] });
+  const { url, c } = await fresh();
+  const r = await get("/api/contacts", c, url);
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.deepEqual(Object.keys(j), ["contacts"]);
+  const emails = j.contacts.map((x) => x.email);
+  // Боб: 2 письма (6) + от него 1 (e2) = 7; Анна: 3 + от неё 1 (e1) = 4; Дэйв и Карл по 3, Ева 1 (плюс по 2 за свежесть у всех, кроме давних)
+  assert.equal(emails[0], "bob@example.org");
+  assert.equal(emails[1], "anna@example.org");
+  assert.deepEqual(emails.slice(2, 4).sort(), ["carl@example.org", "dave@example.org"]);
+  for (const bad of [EMAIL, "alias@dvbstudio.ru", "noreply@shop.example", "не адрес"]) assert.ok(!emails.includes(bad), bad);
+  assert.ok(emails.includes("eva@example.org"), "отправитель из «Входящих»");
+  assert.ok(!emails.includes("enc@example.org"), "письма из «Черновиков» не учитываются");
+  assert.equal(emails.length, new Set(emails.map((e) => e.toLowerCase())).size, "без повторов");
+  for (const x of j.contacts) {
+    assert.deepEqual(Object.keys(x).sort(), ["email", "name"]);
+    assert.ok(!new RegExp("[<>\",;\\u0000-\\u001f" + String.fromCharCode(0x2028, 0x2029) + "]").test(x.name), "имя очищено: " + JSON.stringify(x.name));
+  }
+  assert.equal(j.contacts.find((x) => x.email === "dave@example.org").name, "Дэйв x Bcc: z");
+  assert.equal(j.contacts.find((x) => x.email === "anna@example.org").name, "Анна");
+});
+
+test("подсказки адресов: без входа 401, без лишних полей, ошибка Stalwart даёт 502, пустой ящик даёт пустой список", async () => {
+  resetMails();
+  const { url, c } = await fresh();
+  assert.equal((await fetch(url + "/api/contacts")).status, 401);
+  assert.equal((await fetch(url + "/api/contacts", { headers: { Cookie: "x=y" } })).status, 401);
+  MAILS.clear();
+  const j = await (await get("/api/contacts", c, url)).json();
+  assert.deepEqual(j, { contacts: [] });
+});

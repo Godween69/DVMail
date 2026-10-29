@@ -17,6 +17,7 @@ export interface SendRequest {
   attachments: string[]; // файлы, загруженные в этом окне письма (идентификаторы)
   forwardOf: string | null; keep: string[]; // пересылка: письмо-источник и какие его вложения оставить
 }
+export interface Contact { name: string; email: string }
 export interface Limits { file: number; total: number; count: number }
 export interface Uploaded { blobId: string; name: string; type: string; size: number }
 export interface EmailPage { total: number; position: number; emails: EmailItem[] }
@@ -89,6 +90,7 @@ export const api = {
   identities: () => request<{ identities: Identity[] }>("GET", "/api/identities").then((r) => r.identities),
   send: (b: SendRequest) => request<{ ok: true; filed: boolean }>("POST", "/api/send", b),
   limits: () => request<Limits>("GET", "/api/limits"),
+  contacts: () => request<{ contacts: Contact[] }>("GET", "/api/contacts").then((r) => r.contacts),
   upload,
   removeFile: (blobId: string) => request<{ ok: true }>("DELETE", `/api/attachments/${enc(blobId)}`),
   rawUrl: (id: string) => `/api/emails/${enc(id)}/raw`,
