@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nest build",
     "start": "node dist/main.js",
-    "test": "nest build && node --test test/server.test.mjs"
+    "test": "nest build && node --test test/server.test.mjs test/twofactor.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

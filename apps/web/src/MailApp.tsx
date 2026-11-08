@@ -8,6 +8,7 @@ import { folderLabel, sortMailboxes } from "./format";
 import { useMedia, useRoute, useToasts } from "./hooks";
 import { MessageList } from "./MessageList";
 import { Reader } from "./Reader";
+import { SecurityPanel } from "./SecurityPanel";
 import { Sidebar } from "./Sidebar";
 import type { Theme } from "./theme";
 
@@ -32,6 +33,7 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
   const [tick, setTick] = useState(0);
   const [identities, setIdentities] = useState<Identity[] | null>(null);
   const [compose, setCompose] = useState<ComposeState | null>(null);
+  const [security, setSecurity] = useState(false);
   const [toasts, toast] = useToasts();
   const req = useRef(0);
   const small = useMedia("(max-width: 999px)");
@@ -173,7 +175,7 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
 
   return (
     <div className={"shell" + (narrow && route.id ? " reading" : "")}>
-      <Sidebar boxes={boxes} current={currentId} onSelect={selectBox} email={email} theme={theme} onToggleTheme={onToggleTheme} onLogout={onLogout} onCompose={() => void openCompose("new")} drawer={small} open={drawer} onClose={() => setDrawer(false)} />
+      <Sidebar boxes={boxes} current={currentId} onSelect={selectBox} email={email} theme={theme} onToggleTheme={onToggleTheme} onLogout={onLogout} onCompose={() => void openCompose("new")} onSecurity={() => { setDrawer(false); setSecurity(true); }} drawer={small} open={drawer} onClose={() => setDrawer(false)} />
       {showList && (
         <MessageList
           title={current ? folderLabel(current) : ""} total={list.total} items={list.items} loading={list.loading} error={list.error} hasMore={hasMore}
@@ -194,6 +196,9 @@ export function MailApp({ email, theme, onToggleTheme, onLogout }: { email: stri
       )}
       <AnimatePresence>
         {compose && <Compose key={compose.key} identities={identities ?? []} initial={compose.draft} identityId={compose.identityId} limits={compose.limits} keepFiles={compose.keepFiles} onClose={() => setCompose(null)} onSent={sent} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {security && <SecurityPanel onClose={() => setSecurity(false)} />}
       </AnimatePresence>
       <div className="toasts" aria-live="polite">
         <AnimatePresence>
