@@ -1,7 +1,7 @@
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import type { Mailbox } from "./api";
 import { folderLabel } from "./format";
-import { IconArchive, IconDraft, IconFolder, IconInbox, IconJunk, IconLogout, IconMoon, IconPen, IconSend, IconSun, IconTrash } from "./icons";
+import { IconArchive, IconDraft, IconFolder, IconInbox, IconJunk, IconLogout, IconMoon, IconPen, IconSend, IconShield, IconSun, IconTrash } from "./icons";
 import type { Theme } from "./theme";
 
 const ICONS: Record<string, () => React.JSX.Element> = {
@@ -11,11 +11,11 @@ const ICONS: Record<string, () => React.JSX.Element> = {
 
 interface Props {
   boxes: Mailbox[]; current: string | null; onSelect: (id: string) => void;
-  email: string; theme: Theme; onToggleTheme: () => void; onLogout: () => void; onCompose: () => void;
+  email: string; theme: Theme; onToggleTheme: () => void; onLogout: () => void; onCompose: () => void; onSecurity: () => void;
   drawer: boolean; open: boolean; onClose: () => void;
 }
 
-export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme, onLogout, onCompose, drawer, open, onClose }: Props) {
+export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme, onLogout, onCompose, onSecurity, drawer, open, onClose }: Props) {
   return (
     <>
       {drawer && open && <div className="backdrop" onClick={onClose} aria-hidden="true" />}
@@ -57,6 +57,7 @@ export function Sidebar({ boxes, current, onSelect, email, theme, onToggleTheme,
                 </motion.span>
               </AnimatePresence>
             </button>
+            <button className="icon-btn" onClick={onSecurity} aria-label="Безопасность" title="Безопасность"><IconShield /></button>
             <button className="icon-btn" onClick={onLogout} aria-label="Выйти" title="Выйти"><IconLogout /></button>
           </div>
         </div>

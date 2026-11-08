@@ -12,6 +12,7 @@
   "dependencies": {
     "dompurify": "3.4.17",
     "motion": "14.7.1",
+    "qrcode-generator": "^2.0.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

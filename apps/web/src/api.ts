@@ -22,6 +22,15 @@ export interface Limits { file: number; total: number; count: number }
 export interface Uploaded { blobId: string; name: string; type: string; size: number }
 export interface EmailPage { total: number; position: number; emails: EmailItem[] }
 
+/** Результат первого шага входа: либо сессия открыта, либо нужен второй шаг (способы, которыми можно подтвердить) */
+export type LoginResult = { email: string } | { twoFactor: { methods: string[] } };
+export interface Challenge { challenge: string; number: string; qr: string; expiresIn: number }
+export interface FactorStatus {
+  available: boolean; enabled?: boolean; chatAvailable?: boolean; chatLinked?: boolean; matrixId?: string | null;
+  totpAvailable?: boolean; totpEnabled?: boolean; recoveryLeft?: number; methods?: string[];
+}
+export type ChatState = "pending" | "approved" | "failed" | "none";
+
 export class ApiError extends Error {
   constructor(public readonly status: number, message: string) { super(message); }
 }
@@ -79,7 +88,21 @@ function upload(file: File, onProgress: (fraction: number) => void): { promise: 
 const enc = encodeURIComponent;
 export const api = {
   me: () => request<{ email: string }>("GET", "/api/auth/me"),
-  login: (email: string, password: string) => request<{ email: string }>("POST", "/api/auth/login", { email, password }),
+  login: (email: string, password: string) => request<LoginResult>("POST", "/api/auth/login", { email, password }),
+  // Второй шаг входа (после пароля). Талон держит сервер, браузеру он не нужен.
+  twoFactorCode: (code: string) => request<{ email: string }>("POST", "/api/auth/2fa/code", { code }),
+  twoFactorChatStart: () => request<Challenge>("POST", "/api/auth/2fa/chat/start", {}),
+  twoFactorChatStatus: () => request<{ state: ChatState; email?: string }>("POST", "/api/auth/2fa/chat/status", {}),
+  twoFactorCancel: () => request<void>("POST", "/api/auth/2fa/cancel", {}),
+  // Настройки безопасности (страница «Безопасность»)
+  security: () => request<FactorStatus>("GET", "/api/auth/security"),
+  totpBegin: (password: string) => request<{ secret: string; uri: string }>("POST", "/api/auth/security/totp/begin", { password }),
+  totpEnable: (code: string) => request<{ recoveryCodes: string[] | null }>("POST", "/api/auth/security/totp/enable", { code }),
+  totpDisable: (password: string, code?: string) => request<{ ok: true }>("POST", "/api/auth/security/totp/disable", { password, code }),
+  recoveryNew: (password: string, code?: string) => request<{ recoveryCodes: string[] }>("POST", "/api/auth/security/recovery/new", { password, code }),
+  chatLinkStart: (password: string, code?: string) => request<Challenge>("POST", "/api/auth/security/chat/start", { password, code }),
+  chatLinkStatus: () => request<{ state: ChatState; matrixId?: string; recoveryCodes?: string[] | null }>("POST", "/api/auth/security/chat/status", {}),
+  chatUnlink: (password: string, code?: string) => request<{ ok: true }>("DELETE", "/api/auth/security/chat", { password, code }),
   logout: () => request<void>("POST", "/api/auth/logout"),
   mailboxes: () => request<{ mailboxes: Mailbox[] }>("GET", "/api/mailboxes").then((r) => r.mailboxes),
   emails: (mailbox: string, position: number, limit: number, q: string) =>

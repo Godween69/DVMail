@@ -2,6 +2,7 @@ import { motion, useAnimate } from "motion/react";
 import { useState, type FormEvent } from "react";
 import { api, ApiError } from "./api";
 import { IconEye, IconEyeOff, IconLock } from "./icons";
+import { TwoFactorStep } from "./TwoFactorStep";
 
 export function Login({ onLogin, notice }: { onLogin: (email: string) => void; notice?: string }) {
   const [email, setEmail] = useState("");
@@ -9,6 +10,7 @@ export function Login({ onLogin, notice }: { onLogin: (email: string) => void; n
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [methods, setMethods] = useState<string[] | null>(null); // не null: пароль принят, идёт второй шаг
   const [card, animate] = useAnimate<HTMLDivElement>();
 
   async function submit(ev: FormEvent) {
@@ -19,6 +21,7 @@ export function Login({ onLogin, notice }: { onLogin: (email: string) => void; n
     try {
       const r = await api.login(email.trim(), password);
       setPassword("");
+      if ("twoFactor" in r) { setMethods(r.twoFactor.methods); setBusy(false); return; }
       onLogin(r.email);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Не удалось войти");
@@ -38,6 +41,7 @@ export function Login({ onLogin, notice }: { onLogin: (email: string) => void; n
             <div><h1>DVMail</h1><p>Личная защищённая почта</p></div>
           </div>
           {notice && <p className="notice" role="status">{notice}</p>}
+          {methods ? <TwoFactorStep methods={methods} onLogin={onLogin} onCancel={() => setMethods(null)} /> : <>
           <form onSubmit={submit} noValidate>
             <label htmlFor="email">Адрес почты</label>
             <input id="email" type="email" autoComplete="username" inputMode="email" placeholder="name@example.org" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
@@ -54,6 +58,7 @@ export function Login({ onLogin, notice }: { onLogin: (email: string) => void; n
             </motion.button>
           </form>
           <p className="hint">Если у ящика включена двухфакторная защита, входите паролем приложения: его создают в личном кабинете почты.</p>
+          </>}
         </div>
       </motion.div>
     </main>

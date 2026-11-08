@@ -16,6 +16,10 @@ export interface AppConfig {
   maxFailPerIp: number;     // неудач с одного адреса сети за окно
   failWindowMs: number;
   maxRequestsPerMinute: number; // запросов в минуту с одной сессии (обычная работа на порядок меньше)
+  authUrl: string;          // внутренний адрес DV Auth (второй фактор); пусто: второй фактор не подключён
+  authSecret: string;       // секрет этого приложения в DV Auth (не короче 32 символов)
+  pendingMs: number;        // сколько человек может проходить второй шаг после пароля
+  cookieNamePending: string;
 }
 
 export const CONFIG = Symbol("CONFIG");
@@ -37,8 +41,18 @@ export function loadConfig(over: Partial<AppConfig> = {}): AppConfig {
     maxFailPerIp: 20,
     failWindowMs: 15 * 60 * 1000,
     maxRequestsPerMinute: 300,
+    authUrl: (e.DVMAIL_AUTH_URL ?? "").trim().replace(/\/+$/, ""),
+    authSecret: (e.DVMAIL_AUTH_SECRET ?? "").trim(),
+    pendingMs: 5 * 60 * 1000,
+    cookieNamePending: "",
     ...over,
   };
   cfg.cookieName = cfg.cookieSecure ? "__Host-dvmail_sid" : "dvmail_sid";
+  cfg.cookieNamePending = cfg.cookieSecure ? "__Host-dvmail_pend" : "dvmail_pend";
+  // Адрес и секрет DV Auth задаются только вместе: половинная настройка почти наверняка ошибка,
+  // а молча работать без второго фактора при такой ошибке нельзя.
+  if ((cfg.authUrl === "") !== (cfg.authSecret === "")) throw new Error("DVMAIL_AUTH_URL и DVMAIL_AUTH_SECRET задаются вместе или не задаются вовсе");
+  if (cfg.authSecret !== "" && cfg.authSecret.length < 32) throw new Error("DVMAIL_AUTH_SECRET короче 32 символов");
+  if (cfg.authUrl !== "" && !/^https?:\/\/[^\s/]+(:\d+)?$/.test(cfg.authUrl)) throw new Error("DVMAIL_AUTH_URL должен быть вида http://хост:порт");
   return cfg;
 }

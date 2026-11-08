@@ -6,9 +6,12 @@ import { AuthController } from "./auth.controller";
 import { AppConfig, CONFIG } from "./config";
 import { ContactsController } from "./contacts.controller";
 import { CsrfGuard } from "./csrf.guard";
+import { DvAuthClient } from "./dvauth.client";
 import { HealthController } from "./health.controller";
 import { LoginLimiter } from "./login-limiter";
 import { MailController } from "./mail.controller";
+import { PendingStore } from "./pending.store";
+import { SecurityController } from "./security.controller";
 import { SendController } from "./send.controller";
 import { SessionGuard } from "./session.guard";
 import { SessionStore } from "./session.store";
@@ -19,11 +22,11 @@ export class AppModule {
   static forRoot(cfg: AppConfig): DynamicModule {
     return {
       module: AppModule,
-      controllers: [HealthController, AuthController, MailController, SendController, AttachmentsController, ContactsController],
+      controllers: [HealthController, AuthController, SecurityController, MailController, SendController, AttachmentsController, ContactsController],
       providers: [
         { provide: CONFIG, useValue: cfg },
         { provide: APP_GUARD, useClass: CsrfGuard }, // защита от подделки запросов на всех маршрутах
-        SessionStore, LoginLimiter, StalwartClient, SessionGuard, AttachmentRegistry,
+        SessionStore, PendingStore, LoginLimiter, StalwartClient, DvAuthClient, SessionGuard, AttachmentRegistry,
       ],
     };
   }
